@@ -33,10 +33,6 @@ def bin_to_dec(binary, nint=None, phase=False, signmag=False):
     n = len(binary)
 
     if phase:
-        #if binary[0]=='1':
-        #    sign = -1.
-        #elif binary[0]=='0':
-        #    sign = 1.
         if binary[0]=='1':
             if nint is None:
                 nint_ = n-1
@@ -44,17 +40,14 @@ def bin_to_dec(binary, nint=None, phase=False, signmag=False):
                 nint_ = nint
             basis = -(2.**(nint_))
         binary = binary[1:]
-        #if nint is not  None:
-        #    nint += 1
 
     n = len(binary)
     if nint is None:
         nint = n
 
     digit = 0.
-    for i,bit in enumerate(np.arange(nint-n,nint)[::-1]):#enumerate(np.arange(nint-n+1,nint+1)[::-1]):
+    for i,bit in enumerate(np.arange(nint-n,nint)[::-1]):
         digit+=(2.**bit)*int(binary[i])
-        #print(i,bit,2.**bit,binary[i],digit)
     return digit + basis
 
 def my_binary_repr(digit, n, nint=None, phase=False, nround=True, overflow_error=True, signmag=False):
@@ -124,71 +117,6 @@ def my_binary_repr(digit, n, nint=None, phase=False, nround=True, overflow_error
 
     return bin_out
 
-def my_binary_repr_old(digit, n, nint=None, phase=False, nround=True, overflow_error=True):
-    """
-    Convert a floating point digit to binary string
-    digit - input number (float)
-    n - total number of bits (int)
-    nint - number of integer bits. Default to lowest required (int)
-    """
-
-    #digit = np.round(float(digit), 15)
-
-    n_ = n
-
-    if nint is None:# or nint==n:
-        if phase:
-            nint = n - 1
-        else:
-            nint = n
-
-    if phase:
-        dmax = 2**(nint) - 2.**(1+nint-n)#bin_to_dec('0'+''.join(np.ones(n-1).astype(int).astype(str)), nint=nint, phase=phase)
-        dmin = -2**(nint)#bin_to_dec('1'+''.join(np.zeros(n-1).astype(int).astype(str)), nint=nint, phase=phase)
-        n -= 1
-    else:
-        dmax = bin_to_dec(''.join(np.ones(n).astype(int).astype(str)), nint=nint, phase=phase)
-        dmin = 0.
-
-    if overflow_error:
-        if digit>dmax or digit<dmin:
-            raise ValueError('Digit '+str(digit)+' does not lie in the range:',dmin,'-',dmax)
-
-    if nround:
-        n+=1
-
-    value = np.abs(float(digit))
-    bin_out = ''
-    for i,bit in enumerate(np.arange(nint-n,nint)[::-1]):
-        bin_out+=str(int(np.floor(value/2.**bit)))
-        #print(i,bit,bin_out[-1],value,2.**bit,value>=2.**bit)
-        if value>=2.**bit:
-            value-=2.**bit
-
-    if nround:
-        carry = True
-        bin_out = np.array(list(bin_out))
-        for i in np.arange(n)[::-1]:
-            if not carry:
-                break
-            if bin_out[i]=='1':
-                bin_out[i]='0'
-            elif bin_out[i]=='0':
-                bin_out[i]='1'
-                carry = False
-        bin_out = ("").join(list(bin_out[:-1]))
-
-    #print(bin_out)
-
-    if phase:
-        bin_out = '0'+bin_out
-        if digit<0.:
-            bin_out = twos_compliment(bin_out)
-            if np.abs(digit)==2**(n_-1):
-                bin_out = '1'+'0'*(n_-1)
-
-    return bin_out
-
 def pres_est(digit, n, nint=None, phase=False):
     if phase:
         n -= 1
@@ -242,12 +170,24 @@ def get_npres(digits):
 
 def piecewise_poly(xs, coeffs, bounds_):
     ys = np.array([])
-    bounds = bounds_
-    bounds[-1] = np.inf
-    for i in np.arange(len(bounds))[:-1]:
-        ys_ = np.array(np.polyval(coeffs[i], xs[np.greater_equal(xs,bounds[i])&np.greater(bounds[i+1],xs)]))
+    bounds__ = np.copy(bounds_)
+    bounds__[-1] = np.inf
+    for i in np.arange(len(bounds__))[:-1]:
+        ys_ = np.array(np.polyval(coeffs[i], xs[np.greater_equal(xs,bounds__[i])&np.greater(bounds__[i+1],xs)]))
         ys = np.concatenate([ys, ys_])
     return ys
+
+def get_coefficients(xs, coeffs, bounds_):
+    ys = np.array([])
+    bounds__ = np.copy(bounds_)
+    bounds__[-1] = np.inf
+    for i in np.arange(len(bounds__))[:-1]:
+        #print(np.where(np.greater_equal(xs,bounds[i])&np.greater(bounds[i+1],xs), coeffs[i]))
+        ys_ = np.ones(np.sum(np.greater_equal(xs,bounds__[i])&np.greater(bounds__[i+1],xs)))*coeffs[i]
+        #ys_ = np.array(np.polyval(coeffs[i], xs[np.greater_equal(xs,bounds[i])&np.greater(bounds[i+1],xs)]))
+        ys = np.concatenate([ys, ys_])
+    return ys
+
 
 def get_bound_coeffs(func, bounds, norder, reterr=False):
     if np.array(bounds).ndim==0:
@@ -292,7 +232,6 @@ def input_bits_to_qubits(binary, circ, reg, wrap=False, inverse=False, phase=Fal
             circ.x(reg[bit])
 
     if phase<0.:
-        #circ.p(np.angle(phase), phase_reg[0])
         circ.x(qphase[0])
 
     if wrap:
@@ -368,73 +307,7 @@ def QFT(circ, qreg, do_swaps=True, approximation_degree=0., insert_barriers=Fals
 
     return circ
 
-def QFTAddition_prec(circ, qreg1, qreg2, wrap=False, inverse=False, label='Add', QFT_on=True, iQFT_on=True, nint1=None, nint2=None, phase=False):
-    r"""
-    |qreg1>|qreg2> -> |qreg1>|qreg2 + qreg1>
-    """
-    n1 = len(qreg1)
-    n2 = len(qreg2)
-
-    if nint1==None:
-        nint1 = n1
-    if nint2==None:
-        nint2 = n2
-
-    if inverse:
-        wrap = True
-
-    if wrap:
-        qreg1 = QuantumRegister(n1, 'q_reg1')
-        qreg2 = QuantumRegister(n2, 'q_reg2')
-        circ = QuantumCircuit(qreg1, qreg2)
-
-    if QFT_on:
-        circ.append(QFT(circ, qreg2, do_swaps=False, wrap=True), qreg2[:])
-
-    dp = (n2 - nint2) - (n1 - nint1)
-
-    jstart = 0
-    jend = n1
-    switch = False
-    if dp!=0 and phase:
-        circ.append(TwosCompliment(circ, qreg1[:-1], wrap=True).control(1), [qreg1[-1], *qreg1[:-1]]);
-        jstart += np.abs(dp)
-        #jend += np.abs(dp)
-        jend -= 1
-        switch = True
-        
-    dpn = 0
-    if dp<0:
-        dpn = np.abs(dp)
-        dp = 0
-
-    for j in np.arange(0,jend):
-        for l in np.arange(0,n2):
-            lam = 2*np.pi*2.**(-dp+j-l+1)
-            if lam%(2*np.pi)==0:
-                continue
-            #print(j,l)
-            circ.cp(lam, qreg1[j], qreg2[l])
-            if switch and lam%np.pi!=0:
-                circ.append(PhaseGate(-2.*lam).control(2), [qreg1[-1], qreg1[j], qreg2[l]]);
-
-    if switch:
-        circ.append(TwosCompliment(circ, qreg1[:-1], wrap=True).control(1), [qreg1[-1], *qreg1[:-1]]);
-
-    if iQFT_on:
-        circ.append(QFT(circ, qreg2, do_swaps=False, wrap=True, inverse=True), qreg2[:])
-
-    if wrap:
-        circ = circ.to_gate()
-        circ.label = label
-
-    if inverse:
-        circ = circ.inverse()
-        circ.label = label+'\dag'
-
-    return circ
-
-def QFTAddition(circ, qreg1, qreg2, wrap=False, inverse=False, label='Add', QFT_on=True, iQFT_on=True, nint1=None, nint2=None, phase=False):
+def QFTAddition(circ, qreg1, qreg2, wrap=False, inverse=False, label='Add', QFT_on=True, iQFT_on=True, nint1=None, nint2=None, phase=False, signmag=False):
     r"""
     |qreg1>|qreg2> -> |qreg1>|qreg2 + qreg1>
     """
@@ -463,8 +336,12 @@ def QFTAddition(circ, qreg1, qreg2, wrap=False, inverse=False, label='Add', QFT_
         dpn = np.abs(dp)
         dp = 0
 
-    add_gate = QFTAddition_(circ, qreg1[dpn:], qreg2[dp:], wrap=True, phase=phase, QFT_on=QFT_on, iQFT_on=iQFT_on)
+    add_gate = QFTAddition_(circ, qreg1[dpn:], qreg2[dp:], wrap=True, phase=False, QFT_on=QFT_on, iQFT_on=iQFT_on, signmag=signmag)
     circ.append(add_gate, [*qreg1[dpn:], *qreg2[dp:]]);
+
+    if n1!=n2 and not signmag and phase:
+        for i in np.arange(nint2-nint1):
+            circ.cx(qreg1[-1], qreg2[-i-1]);
 
     if wrap:
         circ = circ.to_gate()
@@ -476,7 +353,7 @@ def QFTAddition(circ, qreg1, qreg2, wrap=False, inverse=False, label='Add', QFT_
 
     return circ
 
-def QFTAddition_(circ, qreg1, qreg2, wrap=False, inverse=False, label='Add', QFT_on=True, iQFT_on=True, pm=1, phase=False):
+def QFTAddition_(circ, qreg1, qreg2, wrap=False, inverse=False, label='Add', QFT_on=True, iQFT_on=True, pm=1, phase=False, signmag=False):
     r"""
     |qreg1>|qreg2> -> |qreg1>|qreg2 + qreg1>
     """
@@ -495,7 +372,7 @@ def QFTAddition_(circ, qreg1, qreg2, wrap=False, inverse=False, label='Add', QFT
         circ.append(QFT(circ, qreg2, do_swaps=False, wrap=True), qreg2[:])
 
     jend = n1
-    if phase and n1!=n2:
+    if phase and signmag:
         circ.append(TwosCompliment(circ, qreg1[:-1], wrap=True).control(1), [qreg1[-1], *qreg1[:-1]]);
         jend -= 1
 
@@ -508,46 +385,8 @@ def QFTAddition_(circ, qreg1, qreg2, wrap=False, inverse=False, label='Add', QFT
             if phase and n1!=n2 and lam%np.pi!=0:
                 circ.append(PhaseGate(-2.*lam).control(2), [qreg1[-1], qreg1[j], qreg2[l]]);
 
-    if phase and n1!=n2:
+    if phase and signmag:
         circ.append(TwosCompliment(circ, qreg1[:-1], wrap=True).control(1), [qreg1[-1], *qreg1[:-1]]);
-
-    if iQFT_on:
-        circ.append(QFT(circ, qreg2, do_swaps=False, wrap=True, inverse=True), qreg2[:])
-
-    if wrap:
-        circ = circ.to_gate()
-        circ.label = label
-
-    if inverse:
-        circ = circ.inverse()
-        circ.label = label+'\dag'
-
-    return circ
-
-def QFTAddition_old(circ, qreg1, qreg2, wrap=False, inverse=False, label='Add', QFT_on=True, iQFT_on=True, pm=1):
-    r"""
-    |qreg1>|qreg2> -> |qreg1>|qreg2 + qreg1>
-    """
-    n1 = len(qreg1)
-    n2 = len(qreg2)
-
-    if inverse:
-        wrap = True
-
-    if wrap:
-        qreg1 = QuantumRegister(n1, 'q_reg1')
-        qreg2 = QuantumRegister(n2, 'q_reg2')
-        circ = QuantumCircuit(qreg1, qreg2)
-
-    if QFT_on:
-        circ.append(QFT(circ, qreg2, do_swaps=False, wrap=True), qreg2[:])
-
-    for j in np.arange(0,n1):
-        for l in np.arange(0,n2):
-            lam = pm*2*np.pi*2.**(j-l-1)
-            if lam%(2*np.pi)==0:
-                continue
-            circ.cp(lam, qreg1[j], qreg2[l])
 
     if iQFT_on:
         circ.append(QFT(circ, qreg2, do_swaps=False, wrap=True, inverse=True), qreg2[:])
@@ -577,7 +416,6 @@ def QFTSubtraction(circ, qreg1, qreg2, wrap=False, inverse=False, label='Sub', Q
         qreg2 = QuantumRegister(n2, 'q_reg2')
         circ = QuantumCircuit(qreg1, qreg2)
 
-    #circ.append(QFT_pre(n2, do_swaps=False).to_gate(), qreg2[:])
     if QFT_on:
         circ.append(QFT(circ, qreg2, do_swaps=False, wrap=True), qreg2[:])
 
@@ -588,7 +426,6 @@ def QFTSubtraction(circ, qreg1, qreg2, wrap=False, inverse=False, label='Sub', Q
                 continue
             circ.cp(lam, qreg1[j], qreg2[j + k])
 
-    #circ.append(QFT_pre(n2, do_swaps=False).inverse().to_gate(), qreg2[:])
     if iQFT_on:
         circ.append(QFT(circ, qreg2, do_swaps=False, wrap=True, inverse=True), qreg2[:])
 
@@ -617,16 +454,8 @@ def QFTSubtractionRHS(circ, qreg1, qreg2, wrap=False, inverse=False, label='Sub'
         qreg2 = QuantumRegister(n2, 'q_reg2')
         circ = QuantumCircuit(qreg1, qreg2)
 
-    #circ.append(QFT_pre(n2, do_swaps=False).to_gate(), qreg2[:])
     if QFT_on:
         circ.append(QFT(circ, qreg2, do_swaps=False, wrap=True, inverse=True), qreg2[:])
-
-    #for j in np.arange(n2):
-    #    for k in np.arange(n1 - j):
-    #        lam = -np.pi / (2.**(j))
-    #        if lam%(2*np.pi)==0.:
-    #            continue
-    #        circ.cp(lam, qreg1[k], qreg2[j + k])
 
     for j in np.arange(n1):
         for k in np.arange(n2 - j):
@@ -635,12 +464,8 @@ def QFTSubtractionRHS(circ, qreg1, qreg2, wrap=False, inverse=False, label='Sub'
                 continue
             circ.cp(lam, qreg1[j], qreg2[j + k])
 
-    #circ.append(QFT_pre(n2, do_swaps=False).inverse().to_gate(), qreg2[:])
     if iQFT_on:
         circ.append(QFT(circ, qreg2, do_swaps=False, wrap=True, inverse=True), qreg2[:])
-
-    #for i in np.arange(1, n2):
-    #   circ.x(qreg2[i])
 
     if wrap:
         circ = circ.to_gate()
@@ -760,8 +585,6 @@ def QFTMultiply(circ, qreg1, qreg2, qreg3, A=1., wrap=False, inverse=False, nint
     n1 = len(qreg1)
     n2 = len(qreg2)
     n3 = len(qreg3)
-    #if n3>n1+n2:
-    #    raise ValueError('The output register is greater than necessary.')
     if n3!=n1+n2 and nint3 == None:
         raise ValueError('Output register should be the combined length of both input registers if no integer bit length is specified.')
 
@@ -809,185 +632,6 @@ def QFTMultiply(circ, qreg1, qreg2, qreg3, A=1., wrap=False, inverse=False, nint
         circ.label = label+'\dag'
 
     return circ
-
-def QFTPosMultiplicand(circ, qreg1, qreg2, qreg3, wrap=False, inverse=False, nint1=None, nint2=None, nint3=None, nint=None, label='PosMulti', comp2=False, QFT_on=True, iQFT_on=True):
-    r"""
-    |qreg1>|qreg2>|qreg3> -> |qreg1>|qreg2>|qreg1 x qreg2>
-    """
-    n1 = len(qreg1)
-    n2 = len(qreg2)
-    n3 = len(qreg3)
-    if n3>n1+n2:
-        raise ValueError('The output register is greater than necessary.')
-
-    if nint1==None:
-        nint1=n1
-
-    if nint2==None:
-        nint2=n2
-
-    if nint3==None:
-        nint3=n3
-
-    if nint==None:
-        nint = (nint1+nint2)-nint3-1
-
-    if n3!=n1+n2 and nint == None:
-        raise ValueError('Output register should be the combined length of both input registers if no integer bit length is specified.')
-
-    if inverse:
-        wrap = True
-
-    if wrap:
-        qreg1 = QuantumRegister(n1, 'q_reg1')
-        qreg2 = QuantumRegister(n2, 'q_reg2')
-        qreg3 = QuantumRegister(n3, 'q_reg3')
-        circ = QuantumCircuit(qreg1, qreg2, qreg3)
-
-    if QFT_on:
-        circ.append(QFT(circ, qreg3, do_swaps=False, wrap=True), qreg3);
-
-    mult_gate = QFTMultiply(circ, qreg1[:-1], qreg2, qreg3, nint=nint, wrap=True, QFT_on=False, iQFT_on=False)
-    circ.append(mult_gate, [*qreg1[:-1], *qreg2, *qreg3]);
-
-    if iQFT_on:
-        circ.append(QFT(circ, qreg3, do_swaps=False, wrap=True, inverse=True), qreg3);
-
-    comp_gate = TwosCompliment(circ, qreg3, wrap=True, QFT_on=True, iQFT_on=True).control(1)
-    circ.append(comp_gate, [qreg1[-1], *qreg3]);
-
-    if wrap:
-        circ = circ.to_gate()
-        circ.label = label
-
-    if inverse:
-        circ = circ.inverse()
-        circ.label = label+'\dag'
-
-    return circ
-
-def QFTPosMultiplicand_signmag(circ, qreg1, qreg2, qreg3, wrap=False, inverse=False, nint1=None, nint2=None, nint3=None, nint=None, label='PosMulti', comp2=False, QFT_on=True, iQFT_on=True):
-    r"""
-    |qreg1>|qreg2>|qreg3> -> |qreg1>|qreg2>|qreg1 x qreg2>
-    """
-    n1 = len(qreg1)
-    n2 = len(qreg2)
-    n3 = len(qreg3)
-    if n3>n1+n2:
-        raise ValueError('The output register is greater than necessary.')
-
-    if nint1==None:
-        nint1=n1
-
-    if nint2==None:
-        nint2=n2
-
-    if nint3==None:
-        nint3=n3
-
-    if nint==None:
-        nint = (nint1+nint2)-nint3-1
-
-    if n3!=n1+n2 and nint == None:
-        raise ValueError('Output register should be the combined length of both input registers if no integer bit length is specified.')
-
-    if inverse:
-        wrap = True
-
-    if wrap:
-        qreg1 = QuantumRegister(n1, 'q_reg1')
-        qreg2 = QuantumRegister(n2, 'q_reg2')
-        qreg3 = QuantumRegister(n3, 'q_reg3')
-        circ = QuantumCircuit(qreg1, qreg2, qreg3)
-
-    if QFT_on:
-        circ.append(QFT(circ, qreg3, do_swaps=False, wrap=True), qreg3);
-
-    mult_gate = QFTMultiply(circ, qreg1[:-1], qreg2, qreg3, nint=nint, wrap=True, QFT_on=False, iQFT_on=False)
-    circ.append(mult_gate, [*qreg1[:-1], *qreg2, *qreg3]);
-
-    if iQFT_on:
-        circ.append(QFT(circ, qreg3, do_swaps=False, wrap=True, inverse=True), qreg3);
-
-    circ.cx(qreg1[-1], qreg3[-1]);
-
-    if wrap:
-        circ = circ.to_gate()
-        circ.label = label
-
-    if inverse:
-        circ = circ.inverse()
-        circ.label = label+'\dag'
-
-    return circ
-
-
-def QFTPosMultiplicand_old(circ, qreg1, qreg2, qreg3, wrap=False, inverse=False, nint1=None, nint2=None, nint3=None, nint=None, label='PosMulti', comp2=False, QFT_on=True, iQFT_on=True):
-    r"""
-    |qreg1>|qreg2>|qreg3> -> |qreg1>|qreg2>|qreg1 x qreg2>
-    """
-    n1 = len(qreg1)
-    n2 = len(qreg2)
-    n3 = len(qreg3)
-    if n3>n1+n2:
-        raise ValueError('The output register is greater than necessary.')
-
-    if nint1==None:
-        nint1=n1
-
-    if nint2==None:
-        nint2=n2
-
-    if nint3==None:
-        nint3=n3
-    
-    if nint==None:
-        nint = (nint1+nint2)-nint3-1
-
-    if n3!=n1+n2 and nint == None:
-        raise ValueError('Output register should be the combined length of both input registers if no integer bit length is specified.')
-
-    if inverse:
-        wrap = True
-
-    if wrap:
-        qreg1 = QuantumRegister(n1, 'q_reg1')
-        qreg2 = QuantumRegister(n2, 'q_reg2')
-        qreg3 = QuantumRegister(n3, 'q_reg3')
-        circ = QuantumCircuit(qreg1, qreg2, qreg3)
-
-    if QFT_on:
-        circ.append(QFT(circ, qreg3, do_swaps=False, wrap=True), qreg3);
-
-    if comp2:
-        comp_gate = TwosCompliment(circ, qreg1[:-1], wrap=True).control(1)
-        circ.append(comp_gate, [qreg1[-1], *qreg1[:-1]]);
-    
-    mult_gate = QFTMultiply(circ, qreg1[:-1], qreg2, qreg3, nint=nint, A=-1, wrap=True, QFT_on=False, iQFT_on=False).control(1)
-    circ.append(mult_gate, [qreg1[-1], *qreg1[:-1], *qreg2, *qreg3]);
-    
-    if comp2:
-        comp_gate_inv = TwosCompliment(circ, qreg1[:-1], wrap=True, inverse=True).control(1)
-        circ.append(comp_gate_inv, [qreg1[-1], *qreg1[:-1]]);
-    
-    circ.x(qreg1[-1]);
-    mult_gate = QFTMultiply(circ, qreg1[:-1], qreg2, qreg3, nint=nint, wrap=True, QFT_on=False, iQFT_on=False).control(1)
-    circ.append(mult_gate, [qreg1[-1], *qreg1[:-1], *qreg2, *qreg3]);
-    circ.x(qreg1[-1]);
-    
-    if iQFT_on:
-        circ.append(QFT(circ, qreg3, do_swaps=False, wrap=True, inverse=True), qreg3);
-
-    if wrap:
-        circ = circ.to_gate()
-        circ.label = label
-
-    if inverse:
-        circ = circ.inverse()
-        circ.label = label+'\dag'
-
-    return circ
-
 
 def QFTMultPhase(circ, qreg1, qreg2, qreg3, wrap=False, inverse=False, nint1=None, nint2=None, nint3=None, label='MultPhase', QFT_on=True, iQFT_on=True, signmag1=False, signmag2=False, signmag3=False, poszero=False):
     r"""
@@ -1075,99 +719,6 @@ def QFTMultPhase(circ, qreg1, qreg2, qreg3, wrap=False, inverse=False, nint1=Non
         # Flip back register 2
         for qubit in np.arange(n2):
             circ.x(qreg2[qubit]);
-
-    if wrap:
-        circ = circ.to_gate()
-        circ.label = label
-
-    if inverse:
-        circ = circ.inverse()
-        circ.label = label+'\dag'
-
-    return circ
-
-def QFTBinaryMultnzero(circ, qreg1, binary, nint=None, nshift=0, wrap=False, inverse=False, label='MultC', QFT_on=True, iQFT_on=True):
-    r"""
-    |qreg1> -> |A x qreg1>
-    """
-    n1 = len(qreg1)
-    n2 = len(binary)
-
-    if nint==None:
-        nint = 0
-
-    if inverse:
-        wrap = True
-
-    if wrap:
-        qreg1 = QuantumRegister(n1, 'q_reg1')
-        circ = QuantumCircuit(qreg1)
-
-    if QFT_on:
-        circ.append(QFT(circ, qreg1, do_swaps=False, wrap=True), qreg1[:])
-
-    for j in np.arange(1, n1 + 1):
-        for i in np.arange(1, n2 + 1):
-            lam = (2 * np.pi) / (2. ** (i + j - n1 - (nint + nshift)))
-            if lam%(2*np.pi)==0.:
-                continue
-            if binary[i-1]=='1':
-                circ.p(lam, qreg1[n1-j])
-
-    if iQFT_on:
-        circ.append(QFT(circ, qreg1, do_swaps=False, wrap=True, inverse=True), qreg1[:])
-
-    if wrap:
-        circ = circ.to_gate()
-        circ.label = label
-
-    if inverse:
-        circ = circ.inverse()
-        circ.label = label+'\dag'
-
-    return circ
-
-
-def QFTBinaryMult(circ, qreg1, qreg3, binary, nint=None, nshift=0, wrap=False, inverse=False, label='MultC', QFT_on=True, iQFT_on=True):
-    r"""
-    |qreg1>|qreg3> -> |qreg1>|A x qreg1>
-    """
-    n1 = len(qreg1)
-    n2 = len(binary)
-    n3 = len(qreg3)
-
-    if n3>n1+n2:
-        raise ValueError('The output register is greater than necessary.')
-    if n3!=n1+n2 and nint == None:
-        raise ValueError('Output register should be the combined length of both input registers if no integer bit length is specified.')
-
-    if nint==None:
-        nint = 0
-
-    if inverse:
-        wrap = True
-
-    if wrap:
-        qreg1 = QuantumRegister(n1, 'q_reg1')
-        qreg3 = QuantumRegister(n3, 'q_reg3')
-        circ = QuantumCircuit(qreg1, qreg3)
-
-    #circ.append(QFT_pre(n3, do_swaps=False).to_gate(), qreg3[:])
-    if QFT_on:
-        circ.append(QFT(circ, qreg3, do_swaps=False, wrap=True), qreg3[:])
-
-    for j in np.arange(1, n1 + 1):
-        for i in np.arange(1, n2 + 1):
-            for k in np.arange(1, n3 + 1):
-                lam = (2 * np.pi) / (2. ** (i + j + k - n3 - (nint + nshift)))
-                if lam%(2*np.pi)==0.:
-                    continue
-                if binary[i-1]=='1':
-                    circ.append(PhaseGate(lam).control(1),[qreg1[n1 - j], qreg3[k - 1]])
-
-    #circ.append(QFT_pre(n3, do_swaps=False).inverse().to_gate(), qreg3[:])
-    if iQFT_on:
-        circ.append(QFT(circ, qreg3, do_swaps=False, wrap=True, inverse=True), qreg3[:])
 
     if wrap:
         circ = circ.to_gate()
@@ -1269,87 +820,6 @@ def QFTMultBinPhase(circ, qreg1, qreg3, binary, wrap=False, inverse=False, nint=
 
     return circ
 
-def QFTMultBinPhase2(circ, qreg1, qreg3, binary, wrap=False, inverse=False, nint=None, label='MultBinPhase', QFT_on=True, iQFT_on=True):
-    r"""
-    |qreg1>|qreg2> -> |qreg1>|qreg1 x A>
-    """
-    n1 = len(qreg1)
-    n2 = len(binary)
-    n3 = len(qreg3)
-    #if n3>n1+n2:
-    #    raise ValueError('The output register is greater than necessary.')
-    if n3!=n1+n2 and nint == None:
-        raise ValueError('Output register should be the combined length of both input registers if no integer bit length is specified.')
-
-    if nint==None:
-        nint=n1
-
-    if inverse:
-        wrap = True
-
-    if wrap:
-        qreg1 = QuantumRegister(n1, 'q_reg1')
-        qreg3 = QuantumRegister(n3, 'q_reg3')
-        circ = QuantumCircuit(qreg1, qreg3)
-
-    comp_gate1_inv = TwosCompliment(circ, qreg1[:-1], wrap=True, inverse=True).control(1)
-    circ.append(comp_gate1_inv, [qreg1[-1], *qreg1[:-1]]);
-
-    if binary[0]=='1':
-        twoscomp = twos_compliment(binary)
-    else:
-        twoscomp = binary
-
-    mult_gate = QFTBinaryMult(circ, qreg1[:-1], qreg3[:-1], twoscomp[1:],  nint=nint, wrap=True)
-    circ.append(mult_gate, [*qreg1[:-1], *qreg3[:-1]]);
-
-    # if reg1 was neg, but binary is pos, then flip 2comp of reg3
-    # then vise versa
-
-    if binary[0]=='1':
-        circ.x(qreg1[-1]);
-        comp_gate = TwosCompliment(circ, qreg3[:-1], wrap=True).control(1)
-        circ.append(comp_gate, [qreg1[-1], *qreg3[:-1]]);
-        circ.x(qreg1[-1]);
-
-    elif binary[0]=='0':
-        comp_gate = TwosCompliment(circ, qreg3[:-1], wrap=True).control(1)
-        circ.append(comp_gate, [qreg1[-1], *qreg3[:-1]]);
-
-    # if reg1(bin) is neg, flip sign of reg3
-
-    circ.cx(qreg1[-1], qreg3[-1]);
-    if binary[0]=='1':
-        circ.x(qreg3[-1]);
-
-    # reverse the twos comp
-
-    comp_gate1 = TwosCompliment(circ, qreg1[:-1], wrap=True).control(1)
-    circ.append(comp_gate1, [qreg1[-1], *qreg1[:-1]]);
-
-    # flip all reg1 qubits
-    # and all but last binary
-
-    if binary[0]=='1':
-        for qubit in np.arange(n1):
-            circ.x(qreg1[qubit]);
-        circ.mcx(qreg1, qreg3[-1], mode='noancilla')
-        for qubit in np.arange(n1):
-            circ.x(qreg1[qubit]);
-
-    if np.sum(np.array(list(binary)).astype(int))==0:
-        circ.cx(qreg1[-1], qreg3[-1]);
-
-    if wrap:
-        circ = circ.to_gate()
-        circ.label = label
-
-    if inverse:
-        circ = circ.inverse()
-        circ.label = label+'\dag'
-
-    return circ
-
 def QFTBinaryAdd(circ, qreg, binary, wrap=False, inverse=False, QFT_on=True, iQFT_on=True, label='AddA'):
     r"""
     |qreg> -> |qreg + A>
@@ -1402,7 +872,6 @@ def QFTBinarySub(circ, qreg, binary, wrap=False, inverse=False, label='SubA'):
         qreg = QuantumRegister(n1, 'q_reg1')
         circ = QuantumCircuit(qreg)
 
-    #circ.append(QFT_pre(n1, do_swaps=False).to_gate(), qreg[:])
     circ.append(QFT(circ, qreg, do_swaps=False, wrap=True), qreg[:])
 
     for i in np.arange(1, n2 + 1):
@@ -1413,7 +882,6 @@ def QFTBinarySub(circ, qreg, binary, wrap=False, inverse=False, label='SubA'):
             if binary[k-1]=='1':
                 circ.p(lam,qreg[i-1])
 
-    #circ.append(QFT_pre(n1, do_swaps=False).inverse().to_gate(), qreg[:])
     circ.append(QFT(circ, qreg, do_swaps=False, wrap=True, inverse=True), qreg[:])
 
     if wrap:
@@ -1440,7 +908,6 @@ def QFTBinarySubRHS(circ, qreg, binary, wrap=False, inverse=False, label='SubA')
         qreg = QuantumRegister(n1, 'q_reg1')
         circ = QuantumCircuit(qreg)
 
-    #circ.append(QFT_pre(n1, do_swaps=False).to_gate(), qreg[:])
     circ.append(QFT(circ, qreg, do_swaps=False, wrap=True, inverse=False), qreg[:])
 
     for i in np.arange(1, n1 + 1):
@@ -1451,16 +918,6 @@ def QFTBinarySubRHS(circ, qreg, binary, wrap=False, inverse=False, label='SubA')
             if binary[i-1]=='1':
                 circ.p(lam,qreg[k-1])
 
-    #for i in np.arange(1, n1 + 1):
-    #    for k in np.arange(1, n2 + 1):
-    #        lam = (2. * np.pi) / (2. ** (i + k - n2))
-    #        if lam%(2*np.pi)==0.:
-    #            continue
-    #        if binary[i-1]=='1':
-    #            circ.p(lam,qreg[k-1])
-
-
-    #circ.append(QFT_pre(n1, do_swaps=False).inverse().to_gate(), qreg[:])
     circ.append(QFT(circ, qreg, do_swaps=False, wrap=True, inverse=True), qreg[:])
 
     for i in np.arange(1, n2):
@@ -1499,10 +956,6 @@ def qubit_to_phase(circ, qreg, nint=None, wrap=False, inverse=False, phase=False
         lam = 2.*np.pi*(2.**(-k))*factor
         qubit = n-nint-k
         circ.p(lam,qreg[qubit])
-
-    #if phase:
-    #    phase_gate = qubit_to_phase(circ, qreg[:-1], nint=nint, factor=-2, wrap=True, phase=False).control(1)
-    #    circ.append(phase_gate, [qreg[-1], *qreg[:-1]]);
 
     if wrap:
         circ = circ.to_gate()
@@ -1659,167 +1112,6 @@ def taylor_coeffs(f_, args=[], a=0., norders=3):
 
     return np.array(coeffs)
 
-def TaylorSeries(circ, qreg1, qreg2, qreg3, qreg4, f_, coeffs=None, nint=None, phase=False, nshift=True, args=[], a=0., norders=4, wrap=False, inverse=False, label='TE', verbose=False):
-    r"""
-    |qreg1>|qreg2>|qreg3>|qreg4> -> |qreg1>|f(qreg1)>|qreg3>|qreg4>
-    """
-    n1 = qreg1.size
-    n2 = qreg2.size
-    n3 = qreg3.size
-    n4 = qreg4.size
-
-    if nint==None:
-        nint=0
-
-    if inverse:
-        wrap = True
-
-    if wrap:
-        qreg1 = QuantumRegister(n1, 'q_reg1')
-        qreg2 = QuantumRegister(n2, 'q_reg2')
-        qreg3 = QuantumRegister(n3, 'q_reg3')
-        qreg4 = QuantumRegister(n4, 'q_reg4')
-        circ = QuantumCircuit(qreg1, qreg2, qreg3, qreg4)
-
-    if coeffs:
-        coeffs_ = coeffs
-    else:
-        coeffs_ = np.array(approximate_taylor_polynomial(f_, a, norders, 1))[::-1]
-
-    if verbose:
-        print('Coefficients:', coeffs_)
-        print(' ')
-
-    # Generate A_i for i=0,...,norders
-    if verbose:
-        print('Generate A_i for i=0,...,norders')
-        print(' ')
-
-    coeffs = []
-    for coeff in coeffs_:
-        coeffs.append(pres_est(coeff, n=n2, nint=nint, phase=phase))
-    coeffs = np.array(coeffs)
-
-    if nshift:
-        nshift_mult = np.ceil(np.log2(np.max(np.abs(coeffs)))) - nint
-        nshift_nord = -norders
-    else:
-        nshift_mult = 0
-        nshift_nord = 0
-
-    if coeffs[0]<0.:
-        print('Only deal with positive functions at the moment!')
-        print(coeffs)
-        return 0
-
-    if norders==0:
-        # |qreg1>|qreg2>|qreg3>|qreg4> -> |qreg1>|A_0>|qreg3>|qreg4>
-        if verbose:
-            print('|qreg1>|qreg2>|qreg3>|qreg4> -> |qreg1>|A_0>|qreg3>|qreg4>')
-            print(' ')
-        step00 = input_bits_to_qubits(my_binary_repr(coeffs[0], n2, nint=nint, phase=phase), circ, reg=qreg2, wrap=True)
-        circ.append(step00, qreg2[:])
-        return circ
-
-    # Step 0
-    if verbose:
-        print('Step 0')
-        print(' ')
-        print('|qreg1>|qreg2>|qreg3>|qreg4> -> |qreg1>||A_0|>|qreg3|>|qreg4>')
-        print(' ')
-    step0 = input_bits_to_qubits(my_binary_repr(np.abs(coeffs[0]), n2, nint=nint, phase=phase), circ, reg=qreg3, wrap=True)
-    circ.append(step0, qreg2[:])
-
-    # Step 1
-    if verbose:
-        print('Step 1')
-        print(' ')
-    if a!=0.:
-        # If a!=0 then:
-        # |qreg1>|qreg2>|qreg3>|qreg4> -> |qreg1-a>|qreg2>|qreg3>|qreg4>
-        if verbose:
-            print('As a!=0 then:')
-            print('|qreg1>|qreg2>|qreg3>|qreg4> -> |qreg1-a>|qreg2>|qreg3>|qreg4>')
-            print(' ')
-        step1 = QFTBinarySub(circ, qreg1, my_binary_repr(a, n1, nint=nint, phase=phase), wrap=True)
-        circ.append(step1, qreg1[:])
-
-    for norder in np.arange(norders+1)[::2]:
-        if norder==0:
-            continue
-        if coeffs[norder]==0.:
-            continue
-
-        step6 = QFTPowerN(circ, qreg1, qreg3, N=norder, nint=nint, wrap=True, nshift=nshift_nord)
-        circ.append(step6, [*qreg1[:], *qreg3[:]])
-
-        step7 = QFTBinaryMult(circ, qreg3, qreg4, my_binary_repr(np.abs(coeffs[norder]), n3, nint=nint, phase=phase), nint=nint, wrap=True, nshift=nshift_mult)
-        circ.append(step7, [*qreg3[:], *qreg4[:]])
-
-        if coeffs[norder]>0.:
-            step8 = QFTAddition(circ, qreg4, qreg2, wrap=True)
-        else:
-            step8 = QFTSubtraction(circ, qreg4, qreg2, wrap=True)
-        circ.append(step8, [*qreg4[:], *qreg2[:]])
-
-        step7_inv = QFTBinaryMult(circ, qreg3, qreg4, my_binary_repr(np.abs(coeffs[norder]), n3, nint=nint, phase=phase), nint=nint, inverse=True, nshift=nshift_mult)
-        circ.append(step7_inv, [*qreg3[:], *qreg4[:]])
-
-        step6_inv = QFTPowerN(circ, qreg1, qreg3, N=norder, nint=nint, inverse=True, nshift=nshift_nord)
-        circ.append(step6_inv, [*qreg1[:], *qreg3[:]])
-
-
-    for norder in np.arange(norders+1)[1::2]:
-        if coeffs[norder]==0.:
-            continue
-
-        if norder==1:
-            step7 = QFTBinaryMult(circ, qreg1, qreg3, my_binary_repr(np.abs(coeffs[norder]), n3, nint=nint, phase=phase), nint=nint, wrap=True, nshift=nshift_mult)
-            circ.append(step7, [*qreg1[:], *qreg3[:]])
-            
-            if coeffs[1]>0.:
-                step8 = QFTAddition(circ, qreg3, qreg2, wrap=True)
-            else:
-                step8 = QFTSubtraction(circ, qreg3, qreg2, wrap=True)
-            circ.append(step8, [*qreg3[:], *qreg2[:]])
-
-        else:
-            step6 = QFTPowerN(circ, qreg1, qreg3, N=norder, nint=nint, wrap=True, nshift=nshift_nord)
-            circ.append(step6, [*qreg1[:], *qreg3[:]])
-
-            step7 = QFTBinaryMult(circ, qreg3, qreg4, my_binary_repr(np.abs(coeffs[norder]), n3, nint=nint, phase=phase), nint=nint, wrap=True, nshift=nshift_mult)
-            circ.append(step7, [*qreg3[:], *qreg4[:]])
-
-            if coeffs[norder]>0.:
-                step8 = QFTAddition(circ, qreg4, qreg2, wrap=True)
-            else:
-                step8 = QFTSubtraction(circ, qreg4, qreg2, wrap=True)
-            circ.append(step8, [*qreg4[:], *qreg2[:]])
-
-        if norder==1:
-            step7_inv = QFTBinaryMult(circ, qreg1, qreg3, my_binary_repr(np.abs(coeffs[norder]), n3, nint=nint, phase=phase), nint=nint, wrap=True, inverse=True, nshift=nshift_mult)
-            circ.append(step7_inv, [*qreg1[:], *qreg3[:]])
-
-        else:
-            step7_inv = QFTBinaryMult(circ, qreg3, qreg4, my_binary_repr(np.abs(coeffs[norder]), n3, nint=nint, phase=phase), nint=nint, inverse=True, nshift=nshift_mult)
-            circ.append(step7_inv, [*qreg3[:], *qreg4[:]])
-
-            step6_inv = QFTPowerN(circ, qreg1, qreg3, N=norder, nint=nint, inverse=True, nshift=nshift_nord)
-            circ.append(step6_inv, [*qreg1[:], *qreg3[:]])
-
-    step1_inv = QFTBinarySub(circ, qreg1, my_binary_repr(a, n1, nint=nint, phase=phase), inverse=True)
-    circ.append(step1_inv, qreg1[:])
-
-    if wrap:
-        circ = circ.to_gate()
-        circ.label = label
-
-    if inverse:
-        circ = circ.inverse()
-        circ.label = label+'\dag'
-
-    return circ, nshift_mult+nshift_nord
-
 def Gaussian_noise_amp(circ, qreg, reps=2, wrap=False, inverse=False, label='GaussNoise'):
     
     n = qreg.size
@@ -1887,78 +1179,6 @@ def depolarisation_channel(circ, qreg, p, wrap=False, inverse=False, label='depo
         
     return circ
 
-def Sarah_amp_add(circ, qregB, qregC, qregA, creg, ratio=0.5, backend=Aer.get_backend('qasm_simulator'), shots=1, wrap=False, inverse=False, label='SA'):
-
-    n1 = qregB.size
-    n2 = qregC.size
-
-    if inverse:
-        wrap = True
-
-    if wrap:
-        qregB = QuantumRegister(n1, 'q_regB')
-        qregC = QuantumRegister(n2, 'q_regC')
-        qregA = QuantumRegister(1, 'q_regA')
-        creg = ClassicalRegister(creg.size, 'c_reg')
-        circ = QuantumCircuit(qregB, qregC, qregA, creg)
-
-    circ.h(qregA[0])
-
-    for i in np.arange(n1):
-        circ.cswap(qregA[0], qregB[i], qregC[i])#append(CSwapGate(ctrl_state=qregA), [qregB[i], qregC[i]])
-    
-    circ.measure(qregC[:], creg[:])
-    result = execute(circ, backend=backend, shots=shots).result()
-    counts = result.get_counts()
-    mesout = list(counts.keys())[0]
-
-    print(mesout)
-
-    if wrap:
-        circ = circ.to_gate()
-        circ.label = label
-
-    if inverse:
-        circ = circ.inverse()
-        circ.label = label+'\dag'
-    
-    return circ
-
-def fake_TE(digits, n, nint, a, coeffs_, phase=False, verbose=False):
-
-    if np.array(digits).ndim==0:
-        digits = np.array([digits])
-
-    coeffs = []
-    for coeff in coeffs_:
-        coeffs.append(pres_est(coeff, n=n, nint=nint, phase=phase))
-    coeffs = np.array(coeffs)
-
-    if coeffs[0]<0.:
-        print('Only consider positive functions!')
-        return 0
-
-    a_ = pres_est(a, n=n, nint=nint, phase=phase)
-
-    TE_out = []
-    for digit in digits:
-        x_ = pres_est(digit, n=n, nint=nint, phase=phase)
-        x_a_ = pres_est(x_ - a_, n=n, nint=nint, phase=phase)
-
-        if verbose:
-            print('x-a:',x_a_)
-
-        est_out = coeffs[0]
-
-        for i in np.arange(len(coeffs))[1:]:
-            poly = pres_est(x_a_**(i), n=n, nint=nint, phase=phase)
-            polyco = pres_est(poly*coeffs[i], n=n, nint=nint, phase=phase)
-            est_out = pres_est(polyco+est_out, n=n, nint=nint, phase=phase)
-
-        TE_out.append(est_out)
-
-    return np.array(TE_out)
-
 def increment_gate(circ, qreg, wrap=False, inverse=False, QFT_on=True, iQFT_on=True, ncut=0, label='inc'):
     n = len(qreg)
 
@@ -1992,13 +1212,12 @@ def increment_gate(circ, qreg, wrap=False, inverse=False, QFT_on=True, iQFT_on=T
 
     return circ
 
-def integer_compare(circ, qreg, qtarg, qans, value, geq=True, wrap=False, inverse=False, uncomp=True, label='P'):
+def integer_compare(circ, qreg, qtarg, qans, value, geq=True, wrap=False, inverse=False, uncomp=True, label='intP'):
     
     n = len(qreg)
 
     if len(qans)!=n-1:
         raise ValueError('Ancilla register must be 1 qubit fewer than input register.')
-
     
     if len(qtarg)!=1:
         raise ValueError('Target register must be of 1 qubit.')
@@ -2062,6 +1281,53 @@ def integer_compare(circ, qreg, qtarg, qans, value, geq=True, wrap=False, invers
 
     return circ
 
+def inequal_cond(circ, qreg, qtarg, qans, value, nint=None, phase=False, comp2=True, geq=True, wrap=False, inverse=False, uncomp=True, xflip=True, label='P'):
+    
+    n = len(qreg)
+
+    if len(qans)!=n-1:
+        raise ValueError('Ancilla register must be 1 qubit fewer than input register.')
+
+    if len(qtarg)!=1:
+        raise ValueError('Target register must be of 1 qubit.')
+
+    if phase and not comp2:
+        raise ValueError('Only twos-compliment representation for signed numbers is currently implemented')
+
+    if wrap:
+        qreg = QuantumRegister(n, 'q_reg')
+        qans = QuantumRegister(n-1, 'q_ans')
+        qtarg = QuantumRegister(1, 'q_targ')
+        circ = QuantumCircuit(qreg, qtarg, qans)
+
+    binary = my_binary_repr(value, n, phase=phase, nint=nint)
+   
+    if phase:
+        if xflip:
+            circ.x(qreg[-1]);
+        if binary[0]=='0':
+            binary = '1'+binary[1:]
+        elif binary[0]=='1':
+            binary = '0'+binary[1:]
+
+    int_value = bin_to_dec(binary, nint=None, phase=False)
+
+    intcomp_gate = integer_compare(circ, qreg, qtarg, qans, int_value, geq=geq, wrap=wrap, inverse=inverse, uncomp=uncomp)
+    circ.append(intcomp_gate, [*qreg, *qtarg, *qans]);
+
+    if phase and xflip:
+        circ.x(qreg[-1]);
+
+    if wrap:
+        circ = circ.to_gate()
+        circ.label = label
+
+    if inverse:
+        circ = circ.inverse()
+        circ.label = label+'\dag'
+
+    return circ
+
 def label_gate(circ, qreg, qtarg, qans, qlab, bounds=None, wrap=False, nint=None, inverse=False, phase=False, ncut=0, label='LABEL'):
     n = len(qreg)
 
@@ -2081,47 +1347,28 @@ def label_gate(circ, qreg, qtarg, qans, qlab, bounds=None, wrap=False, nint=None
     if nlab!=qlab.size:
         raise ValueError('Size of label register does not match the number of bounds placed.')
 
-    if len(qans)!= n+1:
-        raise ValueError('Ancilla register must have one more qubit than input register.')
+    if len(qans)!= n-1:
+        raise ValueError('Ancilla register must have one fewer qubit than input register.')
 
     if wrap:
         qreg = QuantumRegister(n, 'q_reg')
         qtarg = QuantumRegister(1, 'q_targ')
-        qans = QuantumRegister(n+1, 'q_ans')
+        qans = QuantumRegister(n-1, 'q_ans')
         qlab = QuantumRegister(nlab, 'q_lab')
         circ = QuantumCircuit(qreg, qtarg, qans, qlab)
-  
+
     circ.x(qreg[-1]);
 
-    qreg = [*qreg, qans[-1]]
-    qans = [*qans[:-1]]
-
-    #circ.x(qreg[-1]);
-    
     if nlab>=ncut:
-        circ.append(QFT(circ, qlab, do_swaps=False, wrap=True), qlab[:])
+        circ.append(QFT(circ, qlab, do_swaps=False, wrap=True), qlab)
 
     for i,bound_ in enumerate(bounds):
-        #bound_ = qt.bin_to_dec(qt.my_bin_repr(bound_, n=n, nint=nint), nint=n, phase=phase)
-        #intcomp_gate = IntegerComparator(nint, bound, geq=True, name='P'+str(i)).to_gate()
-        #circ.append(intcomp_gate, [*qreg[-nint:], qtarg[0], *qans[:]])
-        
-        #inc_gate = increment_gate(circ, qlab, wrap=True, label='SET'+str(i)).control(1)
-        #circ.append(inc_gate, [qtarg[0], *qlab[:]])
-        
-        #intcomp_gate_inv = IntegerComparator(nint, bound, geq=True).inverse().to_gate()
-        #intcomp_gate_inv.name = 'P'+str(i)+'\dag'
-        #circ.append(intcomp_gate_inv, [*qreg[-nint:], qtarg[0], *qans[:]])
-        
-        #bound = 2**(n-1) + bin_to_dec(my_binary_repr(bound_, n=n, nint=nint, phase=phase), nint=n, phase=False)
-        #bound = bin_to_dec(my_binary_repr(bound_, n=n, nint=nint, phase=phase), nint=n, phase=False)
-    
+
         binary = my_binary_repr(bound_, n=n, nint=nint, phase=phase)
         if binary[0]=='0':
             binary = '1'+binary[1:]
         elif binary[0]=='1':
             binary = '0'+binary[1:]
-        binary = '0'+binary
 
         bound = bin_to_dec(binary, nint=None, phase=False)
 
@@ -2135,9 +1382,9 @@ def label_gate(circ, qreg, qtarg, qans, qlab, bounds=None, wrap=False, nint=None
         circ.append(intcomp_gate_inv, [*qreg, qtarg[0], *qans[:]])
 
     if nlab>=ncut:
-        circ.append(QFT(circ, qlab, do_swaps=False, wrap=True, inverse=True), qlab[:])
+        circ.append(QFT(circ, qlab, do_swaps=False, wrap=True, inverse=True), qlab)
 
-    circ.x(qreg[-2]);
+    circ.x(qreg[-1]);
 
     if wrap:
         circ = circ.to_gate()
@@ -2149,7 +1396,7 @@ def label_gate(circ, qreg, qtarg, qans, qlab, bounds=None, wrap=False, nint=None
 
     return circ
 
-def first_gate(circ, qcoff, qlab, coeffs_in, nint=None, phase=False, wrap=False, inverse=False, label='FIRST', comp2=True):
+def cin_gate(circ, qcoff, qlab, coeffs_in, nint=None, phase=False, wrap=False, inverse=False, label='X', comp2=True):
     
     n = len(qcoff)
     nlab = len(qlab)
@@ -2204,71 +1451,9 @@ def first_gate(circ, qcoff, qlab, coeffs_in, nint=None, phase=False, wrap=False,
     
     return circ
 
-def next_gate(circ, qreg, qlab, coeffs_in, coeffs_out, nint=None, phase=False, wrap=False, inverse=False, label='NEXT'):
-    
-    n = len(qreg)
-    nlab = len(qlab)
-
-    if len(coeffs_in)!=len(coeffs_out):
-        print('Lenght of input coefficients must equal the length of the output.')
-        return 0
-    
-    if 2**nlab<len(coeffs_in):
-        print('Not enough label states to coefficents.')
-        return 0
-
-    if inverse:
-        wrap = True
-
-    if wrap:
-        qreg = QuantumRegister(n, 'q_reg')
-        qlab = QuantumRegister(nlab, 'q_lab')
-        circ = QuantumCircuit(qreg, qlab)  
-    
-    for i in np.arange(len(coeffs_in)):
-        control_bits = my_binary_repr(i, nlab, nint=nlab, phase=False)
-        if i>0:
-            control_bits_ = my_binary_repr(i-1, nlab, nint=nlab, phase=False)[::-1]
-        else:
-            control_bits_ = np.ones(nlab).astype(int).astype(str)
-        
-        for j,control_bit in enumerate(control_bits[::-1]):
-            if control_bit=='0' and control_bits_[j]=='1':
-                circ.x(qlab[j])
-
-        input_gate = input_bits_to_qubits(my_binary_repr(coeffs_in[i], n, nint=nint, phase=phase), circ, reg=qreg, wrap=True, inverse=True).control(nlab)
-        circ.append(input_gate, [*qlab, *qreg])
-        
-        output_gate = input_bits_to_qubits(my_binary_repr(coeffs_out[i], n, nint=nint, phase=phase), circ, reg=qreg, wrap=True).control(nlab)
-        circ.append(output_gate, [*qlab, *qreg])
-
-        if i<len(coeffs_in)-1:
-            control_bits_ = my_binary_repr(i+1, nlab, nint=nlab, phase=False)[::-1]
-        else:
-            control_bits_ = np.ones(nlab).astype(int).astype(str)
-        
-        for j,control_bit in enumerate(control_bits[::-1]):
-            if control_bit=='0' and control_bits_[j]=='1':
-                circ.x(qlab[j])
-
-    if wrap:
-        circ = circ.to_gate()
-        circ.label = label
-
-    if inverse:
-        circ = circ.inverse()
-        circ.label = label+'\dag'
-    
-    return circ
-
-
 def classic_piecewise_function(x_, coeffs_, n, bounds, nint=None, phase=False):
     
     nintx = int(np.ceil(np.log2(np.max(bounds))))
-    #bounds = []
-    #for bound in bounds_:
-    #    bounds.append(qt.pres_est(bound, n, nint=nintx, phase=phase))
-    #bounds = np.array(bounds)
     
     x = pres_est(x_, n, nint=n, phase=phase)
     
@@ -2293,163 +1478,6 @@ def classic_piecewise_function(x_, coeffs_, n, bounds, nint=None, phase=False):
         y = pres_est(y + coeffs[i], n, nint=nint, phase=phase)
         
     return y
-
-def oldy_piecewise_function(circ, q_x, q_y, q_lab, q_coff, coeffs, bounds, nint=None, nintx=None, nintcs=None, phase=False, wrap=False, inverse=False, unlabel=False, label='f_x'):
-
-    nlab = int(np.ceil(np.log2(len(bounds))))
-    nx = len(q_x)
-    n = len(q_y)
-
-    Nord, Ncoeffs = coeffs.shape
-
-    if nint is None:
-        nint = n
-
-    if nlab!=len(q_lab):
-        raise ValueError('Size of label register is smaller than number of bounds.')
-        return 0
-
-    if np.any(nintcs==None):
-        nintcs = []
-        for coeffs_ in coeffs:
-            nintcs.append(int(np.ceil(np.log2(np.max(np.abs(coeffs_))))))
-        nintcs[-1] = nint
-        nintcs = np.array(nintcs).astype(int)
-
-    if nintx is None:
-        nintx = int(np.ceil(np.log2(np.max(np.abs(bounds)))))
-
-    if inverse:
-        wrap = True
-
-    if wrap:
-        q_x = QuantumRegister(nx, 'q_x')
-        q_y = QuantumRegister(n, 'q_y0')
-        q_lab = QuantumRegister(nlab, 'q_lab')
-        q_coff = QuantumRegister(n, 'q_coff')
-
-        circ = QuantumCircuit(q_x, q_y, q_lab, q_coff)
-
-    q_ans = [*q_coff, *q_y]
-    
-    if len(q_ans)<nx:
-        raise ValueError('Coefficient/output register must be greater than half the length of the x register.')
-        
-    lab_gate = label_gate(circ, q_x, q_ans[0], q_ans[1:nx+2], q_lab, bounds=bounds, nint=nintx, phase=phase, wrap=True)
-    circ.append(lab_gate, [*q_x, *q_ans[:nx+2], *q_lab]);
-
-    for i in np.arange(1, Nord):
-
-        y0in_gate = first_gate(circ, q_coff, q_lab, coeffs[i-1], nint=nintcs[i-1], phase=phase, wrap=True)
-        circ.append(y0in_gate, [*q_coff, *q_lab]);        
-        
-        mul_gate = QFTMultPhase(circ, q_x, q_coff, q_y, wrap=True, nint=nintx+nintcs[i-1]-nintcs[i])
-        circ.append(mul_gate, [*q_x, *q_coff, *q_y]);
-
-        y0in_gate_inv = first_gate(circ, q_coff, q_lab, coeffs[i-1], nint=nintcs[i-1], phase=phase, wrap=True, inverse=True)
-        circ.append(y0in_gate_inv, [*q_coff, *q_lab]);        
-
-        y1in_gate = first_gate(circ, q_coff, q_lab, coeffs[i], nint=nintcs[i], phase=phase, wrap=True)
-        circ.append(y1in_gate, [*q_coff, *q_lab]);
-        
-        add_gate = QFTAddition(circ, q_coff, q_y, wrap=True)
-        circ.append(add_gate, [*q_coff, *q_y]);
-
-        y1in_gate_inv = first_gate(circ, q_coff, q_lab, coeffs[i], nint=nintcs[i], phase=phase, wrap=True, inverse=True)
-        circ.append(y1in_gate_inv, [*q_coff, *q_lab]);        
-
-    if unlabel:
-        lab_gate_inv = label_gate(circ, q_x, q_ans[0], q_ans[1:nx+2], q_lab, bounds=bounds, nint=nintx, phase=phase, wrap=True, inverse=True)
-        circ.append(lab_gate_inv, [*q_x, *q_ans[:nx+2], *q_lab]);
-
-    if wrap:
-        circ = circ.to_gate()
-        circ.label = label
-
-    if inverse:
-        circ = circ.inverse()
-        circ.label = label+'\dag'
-
-    return circ
-
-def piecewise_function(circ, q_x, q_y, q_lab, q_coff, coeffs, bounds, nint=None, nintx=None, nintcs=None, phase=False, wrap=False, inverse=False, unlabel=False, label='f_x'):
-
-    nlab = int(np.ceil(np.log2(len(bounds))))
-    nx = len(q_x)
-    n = len(q_y)
-    nc = len(q_coff)
-
-    Nord, Ncoeffs = coeffs.shape
-
-    if nint is None:
-        nint = n
-
-    if nlab!=len(q_lab):
-        raise ValueError('Size of label register is smaller than number of bounds.')
-        return 0
-
-    if np.any(nintcs==None):
-        nintcs = []
-        for coeffs_ in coeffs:
-            nintcs.append(int(np.ceil(np.log2(np.max(np.abs(coeffs_))))))
-        nintcs[-1] = nint
-        nintcs = np.array(nintcs).astype(int)
-
-    if nintx is None:
-        nintx = int(np.ceil(np.log2(np.max(np.abs(bounds)))))
-
-    if inverse:
-        wrap = True
-
-    if wrap:
-        q_x = QuantumRegister(nx, 'q_x')
-        q_y = QuantumRegister(n, 'q_y0')
-        q_lab = QuantumRegister(nlab, 'q_lab')
-        q_coff = QuantumRegister(nc, 'q_coff')
-
-        circ = QuantumCircuit(q_x, q_y, q_lab, q_coff)
-
-    q_ans = [*q_coff, *q_y]
-
-    if len(q_ans)<nx:
-        raise ValueError('Coefficient/output register must be greater than half the length of the x register.')
-
-    lab_gate = label_gate(circ, q_x, q_ans[0], q_ans[1:nx+2], q_lab, bounds=bounds, nint=nintx, phase=phase, wrap=True)
-    circ.append(lab_gate, [*q_x, *q_ans[:nx+2], *q_lab]);
-
-    for i in np.arange(1, Nord):
-
-        y0in_gate = first_gate(circ, q_coff, q_lab, coeffs[i-1], nint=nintcs[i-1,0], phase=phase, wrap=True)
-        circ.append(y0in_gate, [*q_coff, *q_lab]);
-
-        mul_gate = QFTMultPhase(circ, q_x, q_coff, q_y, wrap=True, nint=nintx+nintcs[i-1,0]-nint, iQFT_on=True)
-        circ.append(mul_gate, [*q_x, *q_coff, *q_y]);
-
-        y0in_gate_inv = first_gate(circ, q_coff, q_lab, coeffs[i-1], nint=nintcs[i-1,0], phase=phase, wrap=True, inverse=True)
-        circ.append(y0in_gate_inv, [*q_coff, *q_lab]);
-
-        y1in_gate = first_gate(circ, q_coff, q_lab, coeffs[i], nint=nintcs[i-1,1], phase=phase, wrap=True)
-        circ.append(y1in_gate, [*q_coff, *q_lab]);
-
-        add_gate = QFTAddition(circ, q_coff, q_y, wrap=True, phase=phase, nint1=nintcs[i-1,1], nint2=nint, QFT_on=True)
-        circ.append(add_gate, [*q_coff, *q_y]);
-
-        y1in_gate_inv = first_gate(circ, q_coff, q_lab, coeffs[i], nint=nintcs[i-1,1], phase=phase, wrap=True, inverse=True)
-        circ.append(y1in_gate_inv, [*q_coff, *q_lab]);
-
-    if unlabel:
-        lab_gate_inv = label_gate(circ, q_x, q_ans[0], q_ans[1:nx+2], q_lab, bounds=bounds, nint=nintx, phase=phase, wrap=True, inverse=True)
-        circ.append(lab_gate_inv, [*q_x, *q_ans[:nx+2], *q_lab]);
-
-    if wrap:
-        circ = circ.to_gate()
-        circ.label = label
-
-    if inverse:
-        circ = circ.inverse()
-        circ.label = label+'\dag'
-
-    return circ
 
 def piecewise_function_posmulti(circ, q_x, q_y, q_lab, q_coff, coeffs, bounds, nint=None, nintx=None, nintcs=None, phase=False, wrap=False, inverse=False, unlabel=False, unfirst=False, comp2=False, label='f_x'):
 
@@ -2499,24 +1527,24 @@ def piecewise_function_posmulti(circ, q_x, q_y, q_lab, q_coff, coeffs, bounds, n
     lab_gate = label_gate(circ, q_x, q_ans[0], q_ans[1:nx+2], q_lab, bounds=bounds, nint=nintx, phase=False, wrap=True)
     circ.append(lab_gate, [*q_x, *q_ans[:nx+2], *q_lab]);
 
-    #y1in_gate = first_gate(circ, q_y, q_lab, coeffs[1], nint=nintcs[0,1], phase=phase, wrap=True)
+    #y1in_gate = cin_gate(circ, q_y, q_lab, coeffs[1], nint=nintcs[0,1], phase=phase, wrap=True)
     #circ.append(y1in_gate, [*q_y, *q_lab]);
 
     #circ.append(QFT(circ, q_y, do_swaps=False, wrap=True), q_y);
 
     for i in np.arange(1, Nord):
 
-        y0in_gate = first_gate(circ, q_coff, q_lab, coeffs[i-1], nint=nintcs[i-1,0], phase=phase, wrap=True, comp2=comp2)
+        y0in_gate = cin_gate(circ, q_coff, q_lab, coeffs[i-1], nint=nintcs[i-1,0], phase=phase, wrap=True, comp2=comp2)
         circ.append(y0in_gate, [*q_coff, *q_lab]);
 
         mul_gate = QFTPosMultiplicand(circ, q_coff, q_x, q_y, wrap=True, nint1=nintcs[i-1,0], nint2=nintx, nint3=nint, iQFT_on=True, QFT_on=True, comp2=comp2)
         circ.append(mul_gate, [*q_coff, *q_x, *q_y]);
 
         if unfirst or True:
-            y0in_gate_inv = first_gate(circ, q_coff, q_lab, coeffs[i-1], nint=nintcs[i-1,0], phase=phase, wrap=True, comp2=comp2, inverse=True)
+            y0in_gate_inv = cin_gate(circ, q_coff, q_lab, coeffs[i-1], nint=nintcs[i-1,0], phase=phase, wrap=True, comp2=comp2, inverse=True)
             circ.append(y0in_gate_inv, [*q_coff, *q_lab]);
 
-        y1in_gate = first_gate(circ, q_coff, q_lab, coeffs[i], nint=nintcs[i-1,1], phase=phase, wrap=True)
+        y1in_gate = cin_gate(circ, q_coff, q_lab, coeffs[i], nint=nintcs[i-1,1], phase=phase, wrap=True)
         circ.append(y1in_gate, [*q_coff, *q_lab]);
 
         add_gate = QFTAddition(circ, q_coff, q_y, wrap=True, phase=phase, nint1=nintcs[i-1,1], nint2=nint, QFT_on=True, iQFT_on=True)
@@ -2537,90 +1565,6 @@ def piecewise_function_posmulti(circ, q_x, q_y, q_lab, q_coff, coeffs, bounds, n
         circ.label = label+'\dag'
 
     return circ
-
-def piecewise_function_posmulti_old(circ, q_x, q_y, q_lab, q_coff, coeffs, bounds, nint=None, nintx=None, nintcs=None, phase=False, wrap=False, inverse=False, unlabel=False, comp2=False, label='f_x'):
-
-    nlab = int(np.ceil(np.log2(len(bounds))))
-    nx = len(q_x)
-    n = len(q_y)
-    nc = len(q_coff)
-
-    Nord, Ncoeffs = coeffs.shape
-
-    if nint is None:
-        nint = n
-
-    if nlab!=len(q_lab):
-        raise ValueError('Size of label register is smaller than number of bounds.')
-        return 0
-
-    if np.any(nintcs==None):
-        nintcs = []
-        for coeffs_ in coeffs:
-            nintcs.append(int(np.ceil(np.log2(np.max(np.abs(coeffs_))))))
-        nintcs[-1] = nint
-        nintcs = np.array(nintcs).astype(int)
-
-    if nintx is None:
-        nintx = int(np.ceil(np.log2(np.max(np.abs(bounds)))))
-
-    if inverse:
-        wrap = True
-
-    if wrap:
-        q_x = QuantumRegister(nx, 'q_x')
-        q_y = QuantumRegister(n, 'q_y0')
-        q_lab = QuantumRegister(nlab, 'q_lab')
-        q_coff = QuantumRegister(nc, 'q_coff')
-
-        circ = QuantumCircuit(q_x, q_y, q_lab, q_coff)
-
-    q_ans = [*q_coff, *q_y]
-
-    if len(q_ans)<nx:
-        raise ValueError('Coefficient/output register must be greater than half the length of the x register.')
-
-    lab_gate = label_gate(circ, q_x, q_ans[0], q_ans[1:nx+2], q_lab, bounds=bounds, nint=nintx, phase=False, wrap=True)
-    circ.append(lab_gate, [*q_x, *q_ans[:nx+2], *q_lab]);
-
-    circ.append(QFT(circ, q_y, do_swaps=False, wrap=True), q_y);
-
-    for i in np.arange(1, Nord):
-
-        y0in_gate = first_gate(circ, q_coff, q_lab, coeffs[i-1], nint=nintcs[i-1,0], phase=phase, wrap=True, comp2=comp2)
-        circ.append(y0in_gate, [*q_coff, *q_lab]);
-
-        mul_gate = QFTPosMultiplicand(circ, q_coff, q_x, q_y, wrap=True, nint1=nintcs[i-1,0], nint2=nintx, nint3=nint, iQFT_on=False, QFT_on=False, comp2=comp2)
-        circ.append(mul_gate, [*q_coff, *q_x, *q_y]);
-
-        y0in_gate_inv = first_gate(circ, q_coff, q_lab, coeffs[i-1], nint=nintcs[i-1,0], phase=phase, wrap=True, inverse=True, comp2=comp2)
-        circ.append(y0in_gate_inv, [*q_coff, *q_lab]);
-
-        y1in_gate = first_gate(circ, q_coff, q_lab, coeffs[i], nint=nintcs[i-1,1], phase=phase, wrap=True)
-        circ.append(y1in_gate, [*q_coff, *q_lab]);
-
-        add_gate = QFTAddition(circ, q_coff, q_y, wrap=True, phase=phase, nint1=nintcs[i-1,1], nint2=nint, QFT_on=False, iQFT_on=False)
-        circ.append(add_gate, [*q_coff, *q_y]);
-
-        y1in_gate_inv = first_gate(circ, q_coff, q_lab, coeffs[i], nint=nintcs[i-1,1], phase=phase, wrap=True, inverse=True)
-        circ.append(y1in_gate_inv, [*q_coff, *q_lab]);
-
-    circ.append(QFT(circ, q_y, do_swaps=False, wrap=True, inverse=True), q_y);
-
-    if unlabel:
-        lab_gate_inv = label_gate(circ, q_x, q_ans[0], q_ans[1:nx+2], q_lab, bounds=bounds, nint=nintx, phase=False, wrap=True, inverse=True)
-        circ.append(lab_gate_inv, [*q_x, *q_ans[:nx+2], *q_lab]);
-
-    if wrap:
-        circ = circ.to_gate()
-        circ.label = label
-
-    if inverse:
-        circ = circ.inverse()
-        circ.label = label+'\dag'
-
-    return circ
-
 
 def SWAP_test(circ, q_1, q_2, q_a, wrap=False, inverse=False, label='SWAP'):
 
@@ -2659,69 +1603,6 @@ def gate_decompose(qc):
     """decompose circuit to evaluate cost"""
     pass_ = Unroller(["u3", "cx"])
     return PassManager(pass_).run(qc).count_ops()
-
-def Grover_Rudolph_old(circ, qx, qanc, probs, nint=None, phase=False, wrap=False, inverse=False, swap=False, label='GR_load'):
-
-    nx = len(qx)
-    nanc = len(qanc)
-
-    if nint==None:
-        nint = 0
-
-    if len(probs)!=2**nx:
-        raise ValueError('Probabilities must equal length of x register')
-
-    if inverse:
-        wrap = True
-
-    if wrap:
-        qx = QuantumRegister(nx, 'q_x')
-        qanc = QuantumRegister(nanc, 'q_anc')
-        circ = QuantumCircuit(qx, qanc)
-
-    for m in np.arange(nx):
-        def GR_func(j):
-            j = np.array(j).astype(int)
-            As = []
-            for i in np.arange(2**m):
-                As.append(np.sum(probs[i*2**(nx-m):(i+1)*2**(nx-m)]))
-            As1 = []
-            for i in np.arange(2**(m+1)):
-                As1.append(np.sum(probs[i*2**(nx-(m+1)):(i+1)*2**(nx-(m+1))]))
-            return np.arccos(np.sqrt(np.array(As1)[::2][j]/np.array(As)[j]))
-
-        if m==0:
-            coeffs = np.arccos(np.sqrt(np.sum(probs[:2**(nx-1)])))
-            in_gate = input_bits_to_qubits(my_binary_repr(coeffs, nanc, nint=nint, phase=False), circ, reg=qanc, wrap=True)
-            in_gate_inv = input_bits_to_qubits(my_binary_repr(coeffs, nanc, nint=nint, phase=False), circ, reg=qanc, wrap=True, inverse=True)
-            out_qubits = qanc
-            circ.append(in_gate, qanc);
-        else:
-            js = np.arange(2**m)
-            coeffs = GR_func(js)
-            in_gate = first_gate(circ, qanc, qx[:m], coeffs, nint=nint, phase=False, wrap=True)
-            in_gate_inv = first_gate(circ, qanc, qx[:m], coeffs, nint=nint, phase=False, wrap=True, inverse=True)
-            out_qubits = [*qanc, *qx[:m]]
-            circ.append(in_gate, [*qanc, *qx[:m]]);
-
-        rot_gate = CRotation(circ, qanc, qx[m], nint=nint, wrap=True)
-        circ.append(rot_gate, [*qanc, qx[m]])
-
-        circ.append(in_gate_inv, out_qubits);
-
-    if swap:
-        for i in np.arange(nx//2):
-            circ.swap(i, nx-i-1);
-
-    if wrap:
-        circ = circ.to_gate()
-        circ.label = label
-
-    if inverse:
-        circ = circ.inverse()
-        circ.label = label+'\dag'
-
-    return circ
 
 def Grover_Rudolph_load(circ, qx, probs, wrap=False, inverse=False, nstart=0, nend=None, label='GR_load'):
 
@@ -2819,8 +1700,6 @@ def Grover_Rudolph_func(circ, qx, qanc, qlab, qcoff, probs, wrap=False, inverse=
         qcoff = QuantumRegister(nanc, 'q_coff')
         circ = QuantumCircuit(qx, qanc, qlab, qcoff)
 
-    #mtol = nlab+2
-      
     if mtol>nx:
         GRL_gate = Grover_Rudolph_load(circ, qx, probs, wrap=True)
         circ.append(GRL_gate, qx);
@@ -2917,3 +1796,334 @@ def PQC_realamp(circ, qreg, weights, wrap=False, inverse=False, label='PQCrealam
 
     return circ
 
+def round_sig(xs, sigfig=0):
+    if np.array(xs).ndim==0:
+        xs = np.array([xs])
+    rxs = []
+    for x in xs:
+        if x!=0.:
+            rxs.append(np.round(x, sigfig-int(np.floor(np.log10(np.abs(x))))))
+        else:
+            rxs.append(0.)
+    rxs = np.array(rxs)
+    return rxs
+
+
+def optimize_coeffs_qubits_old(func, nx, nlab, nintx, ncut0, ncut1, nsig0=4, nsig1=4, norder=1, phase=True):
+
+    xmax = np.power(2.,nintx) - np.power(2.,nintx-nx)
+    xmin = 0.
+    xs = np.linspace(xmin,xmax,2**(nx))
+
+    Nbounds = 2**nlab
+
+    ############ Set piecewise polynomial bounds #################
+
+    bounds_ = np.linspace(xmin, xmax, Nbounds+1)
+
+    bounds__ = []
+    for bound in bounds_:
+        bounds__.append(bin_to_dec(my_binary_repr(bound, n=nx, nint=nintx, phase=False), nint=nintx, phase=False))
+    bounds_ = bounds__
+
+    coeffs = get_bound_coeffs(func, bounds_, norder, reterr=False).T
+    bounds = np.array(bounds_[:-1])
+
+    # Round bounds to given significant figures
+    coeffs[0] = round_sig(coeffs[0], nsig0)
+    coeffs[1] = round_sig(coeffs[1], nsig1)
+
+    nlab = int(np.ceil(np.log2(len(bounds))))
+
+    ###################### Playground ################################
+
+    nint1 = get_nint(coeffs[0])
+    nint2 = nintx + nint1
+    nint3 = get_nint(coeffs[1])
+
+    npres1 = get_npres(coeffs[0])
+    npres2 = (nx - nintx) + npres1
+    npres3 = get_npres(coeffs[1])
+
+    n1 = npres1 + nint1 + 1
+    n2 = npres2 + nint2 + 1
+    n3 = npres3 + nint3 + 1
+
+    ########### round gradients #######################
+
+    rcoeffs = []
+    for coeff in coeffs[0]:
+        bitstr = my_binary_repr(coeff, 100, nint=nint1, phase=True)
+        if bitstr[ncut0]=='0':
+            rem = 0.
+        else:
+            rem = 2**(-(ncut0-nint1-1))
+        if bitstr[0]=='1':
+            rem = rem*-1
+        rcoeff1 = bin_to_dec(bitstr[:ncut0], nint=nint1, phase=True)+rem
+        rcoeff2 = bin_to_dec(bitstr[:ncut0], nint=nint1, phase=True)
+        rcoeff = np.array([rcoeff1,rcoeff2])[np.argmin(np.abs([rcoeff1-coeff,rcoeff2-coeff]))]
+        rcoeffs.append(rcoeff)
+    rcoeffs = np.array(rcoeffs)
+    coeffs[0] = rcoeffs
+
+    fdifs = func(xs) - piecewise_poly(xs, np.array([coeffs[0],np.zeros(len(coeffs[1]))]).T, bounds_)
+    coeffs_ = []
+    bounds__ = bounds_
+    bounds__[-1] = np.inf
+    for i in np.arange(len(bounds__))[:-1]:
+        coeffs_.append(np.mean(fdifs[np.greater_equal(xs,bounds__[i])&np.greater(bounds__[i+1],xs)]))
+    coeffs[1] = np.array(coeffs_)
+    coeffs[1] = round_sig(coeffs[1], nsig1)
+    nint3 = get_nint(coeffs[1])
+    npres3 = get_npres(coeffs[1])
+    n3 = npres3 + nint3 + 1
+
+    rcoeffs = []
+    for coeff in coeffs[1]:
+        bitstr = my_binary_repr(coeff, 100, nint=nint3, phase=True)
+        if bitstr[ncut1]=='0':
+            rem = 0.
+        else:
+            rem = 2**(-(ncut1-nint3-1))
+        if bitstr[0]=='1':
+            rem = rem*-1
+        rcoeff1 = bin_to_dec(bitstr[:ncut1], nint=nint3, phase=True)+rem
+        rcoeff2 = bin_to_dec(bitstr[:ncut1], nint=nint3, phase=True)
+        rcoeff = np.array([rcoeff1,rcoeff2])[np.argmin(np.abs([rcoeff1-coeff,rcoeff2-coeff]))]
+        rcoeffs.append(rcoeff)
+    rcoeffs = np.array(rcoeffs)
+
+    coeffs[1] = rcoeffs
+
+    ############## and repeat ########################
+
+    A1x = piecewise_poly(xs, np.array([coeffs[0],np.zeros(len(coeffs[1]))]).T, bounds_)
+    A1x_A0 = piecewise_poly(xs, coeffs.T, bounds_)
+    coeffs_old = np.copy(coeffs)
+
+    coeffs[0] = np.array([*coeffs[0,2**(nlab-1)+1:],*coeffs[0,:2**(nlab-1)+1]])
+    coeffs[1] = np.array([*coeffs[1,2**(nlab-1)+1:],*coeffs[1,:2**(nlab-1)+1]])
+
+    coeffs[0] = np.array([*coeffs[0,-2:],*coeffs[0,:-2]])
+    coeffs[1] = np.array([*coeffs[1,-2:],*coeffs[1,:-2]])
+
+    nint1 = get_nint(coeffs[0])
+    nint2 = nintx + nint1# - 1
+    nint3 = get_nint(coeffs[1])
+
+    npres1 = ncut0-nint1
+    npres2 = (nx - nintx) + npres1
+    npres3 = ncut1-nint2
+
+    n1 = npres1 + nint1 + 1
+    n2 = npres2 + nint2 + 1
+    n3 = npres3 + nint3 + 1
+
+    while np.min(A1x)>bin_to_dec('1'+'0'*(n2-3)+'1', nint=nint2-1, phase=phase) and np.max(A1x)<bin_to_dec('0'+'1'*(n2-2)+'1', nint=nint2-1, phase=phase):
+        nint2 = nint2 - 1
+        n2 = npres2+nint2+1
+
+    nint2 = nint2 + 1
+    n2 = npres2 + nint2 + 1
+
+    n = n2
+    nc = n1
+
+    nintcs = np.array([[nint1,nint3]])
+    nint = nint2
+
+    if 16*(2**(nc+n+nx+nlab))/2**20>7568:
+        raise ValueError('Too many qubits!',nc+n+nx+nlab)
+
+    return n, nc, nlab, nint, nintcs, coeffs, bounds
+
+def optimize_coeffs_qubits(f_x, xs, m, npres0, npres1, norder=1, phase=True, label_swap=False):
+
+    xmin = xs[0]
+    xmax = xs[-1]
+
+    nx = int(np.log2(len(xs)))
+    nintx = get_nint(xs)
+    npresx = get_npres(xs)
+
+    if xmin==0.:
+        xphase=False
+    else:
+        xphase=True
+    
+    bounds_ = np.linspace(xmin, xmax, (2**m)+1)
+
+    bounds__ = []
+    for bound in bounds_:
+        bounds__.append(bin_to_dec(my_binary_repr(bound, n=nx, nint=nintx, phase=xphase), nint=nintx, phase=xphase))
+    bounds_ = bounds__
+
+    coeffs = get_bound_coeffs(f_x, bounds_, norder, reterr=False).T
+    bounds = np.copy(np.array(bounds_[:-1]))
+
+    # The number of integer bits of A1, A0 and the result
+    nint0 = get_nint(coeffs[0])
+    nint1 = get_nint(coeffs[1])
+    nint = nintx + nint0
+
+    # The number of precision bits of the result
+    npres = npresx + npres0
+
+    # The total number of bits of A1, A0 and the result
+    n0 = npres0 + nint0 + 1
+    n1 = npres1 + nint1 + 1
+    n = npres + nint + 1
+
+    rcoeffs = []
+    for coeff in coeffs[0]:
+        # Convert coefficient to binary string of new length n0, then calculate the corresponding decimal value
+        rcoeff = bin_to_dec(my_binary_repr(coeff, n0, nint=nint0, phase=phase), nint=nint0, phase=phase)
+        rcoeffs.append(rcoeff)
+    
+    coeffs[0] = np.array(rcoeffs)
+
+    # Calculate the differences between the f(x) and A1x over all x
+    fdifs = f_x(xs) - piecewise_poly(xs, np.array([coeffs[0],np.zeros(len(coeffs[1]))]).T, bounds)
+    coeffs_ = []
+    bounds__ = np.copy(bounds_)
+    bounds__[-1] = np.inf
+    for i in np.arange(len(bounds__))[:-1]:
+        # Calculate the mean differences in each domain to be the new bias A0
+        coeffs_.append(np.mean(fdifs[np.greater_equal(xs,bounds__[i])&np.greater(bounds__[i+1],xs)]))
+
+    coeffs[1] = np.array(coeffs_)    
+
+    nint1 = get_nint(coeffs[1])
+
+    rcoeffs = []
+    for coeff in coeffs[1]:
+        # Convert coefficient to binary string of new length n1, then calculate the corresponding decimal value
+        rcoeff = bin_to_dec(my_binary_repr(coeff, n1, nint=nint1, phase=phase), nint=nint1, phase=phase)
+        rcoeffs.append(rcoeff)
+
+    coeffs[1] = np.array(rcoeffs)
+    
+    coeffs[0,-1] = 0.
+    coeffs[1,-1] = bin_to_dec(my_binary_repr(f_x(bounds[-1]), n1, nint=nint1, phase=phase), nint=nint1, phase=phase)
+
+    # The number of integer bits of A1, A0 and the result
+    nint0 = get_nint(coeffs[0])
+    nint1 = get_nint(coeffs[1])
+    nint = nintx + nint0
+
+    # The number of precision bits of the result
+    npres = npresx + npres0
+
+    # The total number of bits of A1, A0 and the result
+    n0 = npres0 + nint0 + 1
+    n1 = npres1 + nint1 + 1
+    n = npres + nint + 1
+
+    ys_rnd = piecewise_poly(xs, coeffs.T, bounds)
+    A1x = piecewise_poly(xs, np.array([coeffs[0],np.zeros(len(coeffs[1]))]).T, bounds)
+
+    nint = get_nint([A1x, ys_rnd])
+    n = npres + nint + 1
+
+    nintcs = np.array([[nint0,nint1]])
+
+    if 16*(2**(n0+n+nx+m))/2**20>7568:
+        raise ValueError('Too many qubits!',n0+n+nx+m)
+
+    if label_swap:
+        coeffs[0] = np.array([coeffs[0,-1],*coeffs[0,:-1]])
+        coeffs[1] = np.array([coeffs[1,-1],*coeffs[1,:-1]])
+
+    bounds[-1] = xmax
+
+    return n, n0, nint, nintcs, coeffs, bounds
+
+
+def get_bound_coeffs(func, bounds, norder, reterr=False):
+    if np.array(bounds).ndim==0:
+        print('Bounds must be a list of two entries!')
+    if len(bounds)==1:
+        print('Bounds must be a list of two entries!')
+
+    coeffs = []
+    errs = []
+    for i in np.arange(len(bounds))[:-1]:
+        coeffs_, err_ = run_remez(func, bounds[i], bounds[i+1], norder)
+        coeffs.append(np.array(coeffs_))
+        errs.append(err_)
+    if reterr:
+        return np.array(coeffs), np.array(errs)
+    else:
+        return np.array(coeffs)
+
+def _get_chebyshev_nodes(n, a, b):
+    nodes = [.5 * (a + b) + .5 * (b - a) * np.cos((2 * k + 1) / (2. * n) * np.pi)
+             for k in range(n)]
+    return nodes
+
+def _get_errors(exact_values, poly_coeff, nodes):
+    ys = np.polyval(poly_coeff, nodes)
+    for i in range(len(ys)):
+        ys[i] = abs(ys[i] - exact_values[i])
+    return ys
+
+def run_remez(fun, a, b, d=5, odd=False, even=False, tol=1.e-13):
+    finished = False
+    # initial set of points for the interpolation
+    cn = _get_chebyshev_nodes(d + 2, a, b)
+    # mesh on which we'll evaluate the error
+    cn2 = _get_chebyshev_nodes(100 * d, a, b)
+    # do at most 50 iterations and cancel if we "lose" an interpolation
+    # point
+    it = 0
+    while not finished and len(cn) == d + 2 and it < 50:
+        it += 1
+        # set up the linear system of equations for Remez' algorithm
+        b = np.array([fun(c) for c in cn])
+        A = np.matrix(np.zeros([d + 2,d + 2]))
+        for i in range(d + 2):
+            x = 1.
+            if odd:
+                x *= cn[i]
+            for j in range(d + 2):
+                A[i, j] = x
+                x *= cn[i]
+                if odd or even:
+                    x *= cn[i]
+            A[i, -1] = (-1)**(i + 1)
+        # this will give us a polynomial interpolation
+        res = np.linalg.solve(A, b)
+
+        # add padding for even/odd polynomials
+        revlist = reversed(res[0:-1])
+        sc_coeff = []
+        for c in revlist:
+            sc_coeff.append(c)
+            if odd or even:
+                sc_coeff.append(0)
+        if even:
+            sc_coeff = sc_coeff[0:-1]
+        # evaluate the approximation error
+        errs = _get_errors([fun(c) for c in cn2], sc_coeff, cn2)
+        maximum_indices = []
+
+        # determine points of locally maximal absolute error
+        if errs[0] > errs[1]:
+            maximum_indices.append(0)
+        for i in range(1, len(errs) - 1):
+            if errs[i] > errs[i-1] and errs[i] > errs[i+1]:
+                maximum_indices.append(i)
+        if errs[-1] > errs[-2]:
+            maximum_indices.append(-1)
+
+        # and choose those as new interpolation points
+        # if not converged already.
+        finished = True
+        for idx in maximum_indices[1:]:
+            if abs(errs[idx] - errs[maximum_indices[0]]) > tol:
+                finished = False
+
+        cn = [cn2[i] for i in maximum_indices]
+
+    return sc_coeff, max(abs(errs))
