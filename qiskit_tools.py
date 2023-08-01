@@ -2,6 +2,7 @@ from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister, execute, 
 from scipy.interpolate import approximate_taylor_polynomial
 from qiskit.circuit.library import RGQFTMultiplier, DraperQFTAdder
 from qiskit.circuit.library.basis_change import QFT as QFT_pre
+from qiskit.extensions import HamiltonianGate
 from qiskit.circuit.library.standard_gates import PhaseGate, RYGate, CSwapGate
 from qiskit.circuit.library.arithmetic.integer_comparator import IntegerComparator
 from qiskit.circuit.library.standard_gates import XGate
@@ -2083,3 +2084,34 @@ def run_remez(fun, a, b, d=5, odd=False, even=False, tol=1.e-13):
         cn = [cn2[i] for i in maximum_indices]
 
     return sc_coeff, max(abs(errs))
+
+def PhaseEst(circ, qreg, qanc, A_gate, wrap=False, inverse=False, label='QPE'):
+
+    n = len(qreg)
+    nanc = len(qanc)
+
+    if inverse:
+        wrap = True
+
+    if wrap:
+        qreg = QuantumRegister(n, 'q_reg')
+        qanc = QuantumRegister(nanc, 'q_anc')
+        circ = QuantumCircuit(qreg, qanc)
+
+    circ.h(qanc);
+
+    for i in np.arange(nanc):
+        A_gate_i = A_gate.power(2.**(i)).control(1)
+        circ.append(A_gate_i, [qanc[i], *qreg]);
+
+    circ.append(QFT(circ, qanc, do_swaps=False, wrap=True, inverse=True), qanc);
+
+    if wrap:
+        circ = circ.to_gate()
+        circ.label = label
+
+    if inverse:
+        circ = circ.inverse()
+        circ.label = label+'\dag'
+
+    return circ
