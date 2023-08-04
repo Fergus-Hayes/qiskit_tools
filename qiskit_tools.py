@@ -2085,7 +2085,7 @@ def run_remez(fun, a, b, d=5, odd=False, even=False, tol=1.e-13):
 
     return sc_coeff, max(abs(errs))
 
-def PhaseEst(circ, qreg, qanc, A_gate, wrap=False, inverse=False, label='QPE'):
+def PhaseEst(circ, qreg, qanc, A_gate, wrap=False, inverse=False, do_swaps=True, reverse_bits=False, label='QPE'):
 
     n = len(qreg)
     nanc = len(qanc)
@@ -2101,10 +2101,15 @@ def PhaseEst(circ, qreg, qanc, A_gate, wrap=False, inverse=False, label='QPE'):
     circ.h(qanc);
 
     for i in np.arange(nanc):
-        A_gate_i = A_gate.power(2.**(i)).control(1)
+        A_gate_i = A_gate.power(-2.**(i)).control(1)
         circ.append(A_gate_i, [qanc[i], *qreg]);
 
-    circ.append(QFT(circ, qanc, do_swaps=False, wrap=True, inverse=True), qanc);
+    iqft_gate = QFT(circ, qanc, do_swaps=do_swaps, wrap=True, inverse=True)
+    
+    if reverse_bits:
+        circ.append(iqft_gate, qanc[::-1]);
+    else:
+        circ.append(iqft_gate, qanc);
 
     if wrap:
         circ = circ.to_gate()
