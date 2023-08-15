@@ -1,6 +1,6 @@
 from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister, execute, Aer, IBMQ
 from scipy.interpolate import approximate_taylor_polynomial
-from qiskit.circuit.library import RGQFTMultiplier, DraperQFTAdder
+from qiskit.circuit.library import RGQFTMultiplier, DraperQFTAdder, ExactReciprocal
 from qiskit.circuit.library.basis_change import QFT as QFT_pre
 from qiskit.extensions import HamiltonianGate
 from qiskit.circuit.library.standard_gates import PhaseGate, RYGate, CSwapGate
@@ -1669,12 +1669,12 @@ def SWAP_test(circ, q_1, q_2, q_a, wrap=False, inverse=False, label='SWAP'):
         q_a = QuantumRegister(1, 'q_a')
         circ = QuantumCircuit(q_1, q_2, q_a)
 
-    circ.h(q_a[0])
+    circ.h(q_a[0]);
 
     for qubit in np.arange(n):
         circ.cswap(q_a,q_1[qubit],q_2[qubit])
 
-    circ.h(q_a[0])
+    circ.h(q_a[0]);
 
     if wrap:
         circ = circ.to_gate()
@@ -2120,3 +2120,77 @@ def PhaseEst(circ, qreg, qanc, A_gate, wrap=False, inverse=False, do_swaps=True,
         circ.label = label+'\dag'
 
     return circ
+
+
+def HHL(circ, qreg, qanc, qtarg, A, t=2.*np.pi, scaling=1./2, wrap=False, inverse=False, neg_vals=True, label='HHL'):
+
+    n = len(qreg)
+    nanc = len(qanc)
+
+    if inverse:
+        wrap = True
+
+    if wrap:
+        qreg = QuantumRegister(n, 'q_reg')
+        qanc = QuantumRegister(nanc, 'q_anc')
+        qtarg = QuantumRegister(1, 'q_targ')
+        circ = QuantumCircuit(qreg, qanc, qtarg)
+
+    A_gate = HamiltonianGate(A, t)
+
+    qe_gate = PhaseEst(circ, qreg, qanc, A_gate, wrap=True, do_swaps=False, reverse_bits=True)
+    circ.append(qe_gate, [*qreg, *qanc]);
+
+    rec_gate = ExactReciprocal(nanc, scaling=scaling, neg_vals=neg_vals).to_gate()
+    circ.append(rec_gate, [*qanc[::-1], qtarg]);
+
+    qe_gate_inv = PhaseEst(circ, qreg, qanc, A_gate, wrap=True, inverse=True, do_swaps=False, reverse_bits=True)
+    circ.append(qe_gate_inv, [*qreg, *qanc]);
+
+    if wrap:
+        circ = circ.to_gate()
+        circ.label = label
+
+    if inverse:
+        circ = circ.inverse()
+        circ.label = label+'\dag'
+
+    return circ
+
+def QGPR(circ, qreg, qanc, qtarg, qcont, v_gate, u_gate, A, t, scaling, wrap=False, inverse=False, neg_vals=True, label='QGPR'):
+
+    n = len(qreg)
+    nanc = len(qanc)
+
+    if inverse:
+        wrap = True
+
+    if wrap:
+        qcont = QuantumRegister(1, 'q_cont')
+        qtarg = QuantumRegister(1, 'q_targ')
+        qreg = QuantumRegister(n, 'q_reg')
+        qanc = QuantumRegister(nanc, 'anc')
+        circ = QuantumCircuit(qreg, qanc, qtarg, qcont)
+    
+    circ.h(qcont);
+
+    circ.append(v_gate.control(1), [qcont, *qreg]);
+
+    circ.x(qcont);
+    circ.cx(qcont, qtarg);
+    circ.append(u_gate.control(1), [qcont, *qreg]);
+    circ.x(qcont);
+
+    hhl_gate = HHL(circ, qreg, qanc, qtarg, A, t=t, scaling=scaling, wrap=True).control(1)
+    circ.append(hhl_gate, [qcont, *qreg, *qanc, qtarg]);
+
+    if wrap:
+        circ = circ.to_gate()
+        circ.label = label
+
+    if inverse:
+        circ = circ.inverse()
+        circ.label = label+'\dag'
+
+    return circ
+
