@@ -1849,6 +1849,91 @@ def Grover_Rudolph_func(circ, qx, qanc, qlab, qcoff, probs, wrap=False, inverse=
 
     return circ
 
+def lpf(circ, qx, qout, qlab, qcoff, coeffs, bounds, nintx=None, nintcs=None, nint=None, phasex=False, phase=True, wrap=False, inverse=False, label='f_x'):
+
+    nlab = int(np.ceil(np.log2(len(bounds))))
+    nx = len(qx)
+    n = len(qout)
+    nc = len(qcoff)
+
+    Nord, Ncoeffs = coeffs.shape
+
+    if Nord!=2:
+        raise ValueError('Currently only working for linear piecewise approximations.')
+
+    if nlab!=len(qlab):
+        raise ValueError('Size of label register is smaller than number of bounds.')
+        return 0
+
+    if nint==None:
+        nint=n
+
+    if np.any(nintcs==None):
+        nintcs = []
+        for coeffs_ in coeffs:
+            nintcs.append(int(np.ceil(np.log2(np.max(np.abs(coeffs_))))))
+        nintcs[-1] = nint
+        nintcs = np.array(nintcs).astype(int)
+
+    if nintx is None:
+        nintx = int(np.ceil(np.log2(np.max(np.abs(bounds)))))
+
+    if inverse:
+        wrap = True
+
+    if wrap:
+        qx = QuantumRegister(nx, 'x')
+        qout = QuantumRegister(n, 'out')
+        qlab = QuantumRegister(nlab, 'lab')
+        qcoff = QuantumRegister(nc, 'coff')
+
+        circ = QuantumCircuit(qx, qout, qlab, qcoff)
+
+    qans = [*qcoff[1:], *qout][:nx-1]
+    qtarg = qcoff[0]
+
+    # Label the data with the labelling operation
+    l_gate = label_gate(circ, qx, qtarg, qans, qlab, bounds=bounds, nint=nintx, phase=phase, wrap=True)
+    circ.append(l_gate, [*qx, qtarg, *qans, *qlab]);
+
+    # Load A1 into the coefficient register conditioned on the label register
+    X1_gate = cin_gate(circ, qcoff, qlab, coeffs[0], nint=nintcs[0,0], phase=phase, wrap=True)
+    circ.append(X1_gate, [*qcoff, *qlab]);
+
+    # Multiply the coefficient and x registers and save the output on the output register
+    mul_gate = QFTMultPhase(circ, qcoff, qx, qout, wrap=True, nint1=nintcs[0,0], nint2=nintx, nint3=nint)
+    circ.append(mul_gate, [*qcoff, *qx, *qout]);
+
+    # Unload A1 from the coefficient register with the inverse load operation
+    X1_gate_inv = cin_gate(circ, qcoff, qlab, coeffs[0], nint=nintcs[0,0], phase=phase, wrap=True, inverse=True)
+    circ.append(X1_gate_inv, [*qcoff, *qlab]);
+
+    # Load A0 into the coefficient register conditioned on the label register
+    X0_gate = cin_gate(circ, qcoff, qlab, coeffs[1], nint=nintcs[0,1], phase=phase, wrap=True)
+    circ.append(X0_gate, [*qcoff, *qlab]);
+
+    # Add the coefficient register to the output register
+    add_gate = QFTAddition(circ, qcoff, qout, nint1=nintcs[0,1], nint2=nint, wrap=True, phase=phase)
+    circ.append(add_gate, [*qcoff, *qout]);
+
+    # Unload A0 to clear the coefficient register
+    X0_gate_inv = cin_gate(circ, qcoff, qlab, coeffs[1], nint=nintcs[0,1], phase=phase, wrap=True, inverse=True)
+    circ.append(X0_gate_inv, [*qcoff, *qlab]);
+
+    # Unlabel the label register
+    l_gate_inv = label_gate(circ, qx, qtarg, qans, qlab, bounds=bounds, nint=nintx, phase=phase, wrap=True, inverse=True)
+    circ.append(l_gate_inv, [*qx, qtarg, *qans, *qlab]);
+
+    if wrap:
+        circ = circ.to_gate()
+        circ.label = label
+
+    if inverse:
+        circ = circ.inverse()
+        circ.label = label+'\dag'
+
+    return circ
+
 
 def PQC_realamp(circ, qreg, weights, wrap=False, inverse=False, label='PQCrealamp'):
     n = len(qreg)
@@ -1895,49 +1980,67 @@ def round_sig(xs, sigfig=0):
     rxs = np.array(rxs)
     return rxs
 
-def optimize_coeffs_qubits(f_x, xs, m, npres0, npres1, norder=1, phase=True, label_swap=False):
+def optimize_coeffs_qubits(f_x, xs, m, n=None, npres0=None, npres1=None, norder=1, phase=True, label_swap=False):
+
+    if n==None and npres0==None and npres1==None:
+        raise ValueError('Must specify either the number of qubits of the output register or the precision qubits of sets of coefficients.')
+
+    if npres0==None and npres1!=None or npres0!=None and npres1==None:
+        raise ValueError('Must leave both precision qubit options as None.')
 
     xmin = xs[0]
     xmax = xs[-1]
 
     nx = int(np.log2(len(xs)))
     nintx = get_nint(xs)
-    npresx = get_npres(xs)
+    npresx = int(-np.log2(xs[1]-xs[0]))
 
     if xmin==0.:
         xphase=False
     else:
         xphase=True
-    
-    bounds_ = np.linspace(xmin, xmax, (2**m)+1)
+
+    bounds_ = np.linspace(xs[1], xmax, (2**m))
 
     bounds__ = []
     for bound in bounds_:
         bounds__.append(bin_to_dec(my_binary_repr(bound, n=nx, nint=nintx, phase=xphase), nint=nintx, phase=xphase))
     bounds_ = bounds__
+    bounds_[0] = xs[1]
+    bounds_ = np.append(xmin, bounds_)
 
     coeffs = get_bound_coeffs(f_x, bounds_, norder, reterr=False).T
-    bounds = np.copy(np.array(bounds_[:-1]))
+    #bounds = np.copy(np.array(bounds_[:-1]))
+    bounds = np.copy(np.array(bounds_))
 
     # The number of integer bits of A1, A0 and the result
     nint0 = get_nint(coeffs[0])
     nint1 = get_nint(coeffs[1])
     nint = nintx + nint0
 
-    # The number of precision bits of the result
-    npres = npresx + npres0
+    nswitch = False
+    if n==None:
+        nswitch = True
+        # The number of precision bits of the result
+        npres = npresx + npres0
 
-    # The total number of bits of A1, A0 and the result
-    n0 = npres0 + nint0 + 1
-    n1 = npres1 + nint1 + 1
-    n = npres + nint + 1
+        # The total number of bits of A1, A0 and the result
+        n0 = npres0 + nint0 + 1
+        n1 = npres1 + nint1 + 1
+        n = npres + nint + 1
+    else:
+        npres = n - nint - 1
+        npres0 = npres - npresx
+        n0 = npres0 + nint0 + 1
+        npres1 = n0 - nint1 - 1
+        n1 = npres1 + nint1 + 1
 
     rcoeffs = []
     for coeff in coeffs[0]:
         # Convert coefficient to binary string of new length n0, then calculate the corresponding decimal value
         rcoeff = bin_to_dec(my_binary_repr(coeff, n0, nint=nint0, phase=phase), nint=nint0, phase=phase)
         rcoeffs.append(rcoeff)
-    
+
     coeffs[0] = np.array(rcoeffs)
 
     # Calculate the differences between the f(x) and A1x over all x
@@ -1949,7 +2052,7 @@ def optimize_coeffs_qubits(f_x, xs, m, npres0, npres1, norder=1, phase=True, lab
         # Calculate the mean differences in each domain to be the new bias A0
         coeffs_.append(np.mean(fdifs[np.greater_equal(xs,bounds__[i])&np.greater(bounds__[i+1],xs)]))
 
-    coeffs[1] = np.array(coeffs_)    
+    coeffs[1] = np.array(coeffs_)
 
     nint1 = get_nint(coeffs[1])
 
@@ -1960,28 +2063,37 @@ def optimize_coeffs_qubits(f_x, xs, m, npres0, npres1, norder=1, phase=True, lab
         rcoeffs.append(rcoeff)
 
     coeffs[1] = np.array(rcoeffs)
-    
-    coeffs[0,-1] = 0.
-    coeffs[1,-1] = bin_to_dec(my_binary_repr(f_x(bounds[-1]), n1, nint=nint1, phase=phase), nint=nint1, phase=phase)
+
+    coeffs[0,0] = 0.
+    coeffs[1,0] = bin_to_dec(my_binary_repr(f_x(bounds[0]), n1, nint=nint1, phase=phase), nint=nint1, phase=phase)
 
     # The number of integer bits of A1, A0 and the result
     nint0 = get_nint(coeffs[0])
     nint1 = get_nint(coeffs[1])
     nint = nintx + nint0
 
-    # The number of precision bits of the result
-    npres = npresx + npres0
+    if nswitch:
+        # The number of precision bits of the result
+        npres = npresx + npres0
 
-    # The total number of bits of A1, A0 and the result
-    n0 = npres0 + nint0 + 1
-    n1 = npres1 + nint1 + 1
-    n = npres + nint + 1
+        # The total number of bits of A1, A0 and the result
+        n0 = npres0 + nint0 + 1
+        n1 = npres1 + nint1 + 1
+        n = npres + nint + 1
+    else:
+        npres = n - nint - 1
+        npres0 = npres - npresx
+        n0 = npres0 + nint0 + 1
+        npres1 = n0 - nint1 - 1
+        n1 = npres1 + nint1 + 1
 
     ys_rnd = piecewise_poly(xs, coeffs.T, bounds)
     A1x = piecewise_poly(xs, np.array([coeffs[0],np.zeros(len(coeffs[1]))]).T, bounds)
 
     nint = get_nint([A1x, ys_rnd])
-    n = npres + nint + 1
+    
+    if nswitch:
+        n = npres + nint + 1
 
     nintcs = np.array([[nint0,nint1]])
 
@@ -1992,10 +2104,7 @@ def optimize_coeffs_qubits(f_x, xs, m, npres0, npres1, norder=1, phase=True, lab
         coeffs[0] = np.array([coeffs[0,-1],*coeffs[0,:-1]])
         coeffs[1] = np.array([coeffs[1,-1],*coeffs[1,:-1]])
 
-    bounds[-1] = xmax
-
-    return n, n0, nint, nintcs, coeffs, bounds
-
+    return n, n0, nint, nintcs, coeffs, bounds[:-1], npres0, npres1
 
 def get_bound_coeffs(func, bounds, norder, reterr=False):
     if np.array(bounds).ndim==0:
