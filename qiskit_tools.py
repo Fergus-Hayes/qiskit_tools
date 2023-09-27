@@ -2230,32 +2230,36 @@ def PhaseEst(circ, qreg, qanc, A_gate, wrap=False, inverse=False, do_swaps=True,
 
     return circ
 
-
-def HHL(circ, qreg, qanc, qtarg, A, t=2.*np.pi, scaling=1./2, wrap=False, inverse=False, neg_vals=True, label='HHL'):
-
-    n = len(qreg)
+def HHL(circ, qb, qanc, qtarg, A, t=2.*np.pi, scaling=None, wrap=False, inverse=False, phase=True, label='HHL'):
+        
+    n = len(qb)
     nanc = len(qanc)
 
     if inverse:
         wrap = True
 
     if wrap:
-        qreg = QuantumRegister(n, 'q_reg')
-        qanc = QuantumRegister(nanc, 'q_anc')
-        qtarg = QuantumRegister(1, 'q_targ')
-        circ = QuantumCircuit(qreg, qanc, qtarg)
+        qb = QuantumRegister(n, 'b')
+        qanc = QuantumRegister(nanc, 'anc')
+        qtarg = QuantumRegister(1, 'targ')
+        circ = QuantumCircuit(qb, qanc, qtarg)
 
+    # Define unitary operator given matrix A and evolution time t
     A_gate = HamiltonianGate(A, t)
-
-    qe_gate = PhaseEst(circ, qreg, qanc, A_gate, wrap=True, do_swaps=False, reverse_bits=True)
-    circ.append(qe_gate, [*qreg, *qanc]);
-
-    rec_gate = ExactReciprocal(nanc, scaling=scaling, neg_vals=neg_vals).to_gate()
+    
+    # Apply phase estimation
+    qe_gate = PhaseEst(circ, qb, qanc, A_gate, wrap=True, do_swaps=False, reverse_bits=True)
+    circ.append(qe_gate, [*qb, *qanc]);
+        
+    # Apply ExactReciprocal to rotate the target qubit proportionally to the given scaling and the inverse of the
+    # values stored in the computational basis of the ancillary register
+    rec_gate = ExactReciprocal(nanc, scaling=scaling, neg_vals=phase).to_gate()
     circ.append(rec_gate, [*qanc[::-1], qtarg]);
 
-    qe_gate_inv = PhaseEst(circ, qreg, qanc, A_gate, wrap=True, inverse=True, do_swaps=False, reverse_bits=True)
-    circ.append(qe_gate_inv, [*qreg, *qanc]);
-
+    # Apply the inverse phase estimation
+    qe_gate_inv = PhaseEst(circ, qb, qanc, A_gate, wrap=True, inverse=True, do_swaps=False, reverse_bits=True)
+    circ.append(qe_gate_inv, [*qb, *qanc]);
+    
     if wrap:
         circ = circ.to_gate()
         circ.label = label
